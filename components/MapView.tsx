@@ -7,7 +7,7 @@ import {
   Platform,
   Dimensions,
 } from "react-native";
-import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import RNMapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { AlertTriangle, Navigation, ZoomIn, ZoomOut, Plane } from "lucide-react-native";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
 
@@ -21,11 +21,83 @@ interface MapViewProps {
 }
 
 const INITIAL_REGION = {
-  latitude: 30,
-  longitude: 0,
-  latitudeDelta: 100,
-  longitudeDelta: 100,
+  latitude: 40,
+  longitude: 20,
+  latitudeDelta: 50,
+  longitudeDelta: 50,
 };
+
+const DARK_MAP_STYLE = [
+  {
+    elementType: "geometry",
+    stylers: [{ color: "#0d1b2a" }],
+  },
+  {
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#8ec3b9" }],
+  },
+  {
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#1a535c" }],
+  },
+  {
+    featureType: "administrative.country",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#4a5568" }],
+  },
+  {
+    featureType: "administrative.land_parcel",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "administrative.province",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#4a5568" }],
+  },
+  {
+    featureType: "landscape.man_made",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#334e68" }],
+  },
+  {
+    featureType: "landscape.natural",
+    elementType: "geometry",
+    stylers: [{ color: "#0d1b2a" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "geometry",
+    stylers: [{ color: "#1a535c" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#6b8f71" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#1a535c" }],
+  },
+  {
+    featureType: "road",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "transit",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#1b4965" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#4a5568" }],
+  },
+];
 
 export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
@@ -47,7 +119,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   const getMarkerColor = useCallback((airport: Airport): string => {
     if (!airport.operational) return "#FF4444";
     if (userCountryCode && airport.countryCode === userCountryCode) return "#4ADE80";
-    return "#00D4FF";
+    return "#5BC0EB";
   }, [userCountryCode]);
 
   const zoomIn = useCallback(() => {
@@ -139,7 +211,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
               const isDestination = destinationAirport?.iata === airport.iata;
               const isUserCountry = userCountryCode && airport.countryCode === userCountryCode;
               
-              let dotColor = "#00D4FF";
+              let dotColor = "#5BC0EB";
               if (!airport.operational) dotColor = "#FF4444";
               else if (isOrigin) dotColor = "#4ADE80";
               else if (isDestination) dotColor = "#FFB800";
@@ -149,13 +221,19 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
                 <TouchableOpacity
                   key={airport.iata}
                   style={[
-                    styles.mapDot,
-                    { left: x - 6, top: y - 6, backgroundColor: dotColor },
-                    (isSelected || isOrigin || isDestination) && styles.mapDotSelected,
+                    styles.webMarker,
+                    { left: x - 14, top: y - 32 },
+                    (isSelected || isOrigin || isDestination) && styles.webMarkerSelected,
                   ]}
                   onPress={() => handleAirportPress(airport)}
                   activeOpacity={0.7}
                 >
+                  <View style={[styles.webMarkerPin, { backgroundColor: dotColor }]}>
+                    <View style={styles.webMarkerIcon}>
+                      <View style={[styles.webMarkerDot, { backgroundColor: "#FFFFFF" }]} />
+                    </View>
+                  </View>
+                  <View style={[styles.webMarkerTail, { borderTopColor: dotColor }]} />
                   {(isSelected || isOrigin || isDestination) && (
                     <View style={styles.mapDotLabel}>
                       <Text style={styles.mapDotLabelText}>{airport.iata}</Text>
@@ -237,7 +315,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
 
           <View style={styles.webLegend}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: "#00D4FF" }]} />
+              <View style={[styles.legendDot, { backgroundColor: "#5BC0EB" }]} />
               <Text style={styles.legendText}>Airports</Text>
             </View>
             <View style={styles.legendItem}>
@@ -259,9 +337,9 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
       <RNMapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_DEFAULT}
+        provider={PROVIDER_GOOGLE}
         initialRegion={INITIAL_REGION}
-        mapType="standard"
+        customMapStyle={DARK_MAP_STYLE}
         showsUserLocation={true}
         showsMyLocationButton={false}
         rotateEnabled={false}
@@ -269,6 +347,9 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
       >
         {MAJOR_AIRPORTS.map((airport) => {
           const markerColor = getMarkerColor(airport);
+          const isSelected = selectedAirport?.iata === airport.iata;
+          const isOrigin = originAirport?.iata === airport.iata;
+          const isDestination = destinationAirport?.iata === airport.iata;
 
           return (
             <Marker
@@ -278,12 +359,23 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
                 latitude: airport.latitude,
                 longitude: airport.longitude,
               }}
-              title={`${airport.iata} - ${airport.city}`}
-              description={airport.operational ? airport.name : `CLOSED: ${airport.closureReason}`}
               onPress={() => handleAirportPress(airport)}
-              pinColor={markerColor}
               tracksViewChanges={false}
-            />
+              anchor={{ x: 0.5, y: 1 }}
+            >
+              <View style={styles.customMarker}>
+                <View style={[
+                  styles.markerPin,
+                  { backgroundColor: markerColor },
+                  (isSelected || isOrigin || isDestination) && styles.markerPinSelected,
+                ]}>
+                  <View style={styles.markerIcon}>
+                    <View style={styles.markerInnerDot} />
+                  </View>
+                </View>
+                <View style={[styles.markerTail, { borderTopColor: markerColor }]} />
+              </View>
+            </Marker>
           );
         })}
 
@@ -303,7 +395,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#00D4FF" }]} />
+          <View style={[styles.legendDot, { backgroundColor: "#5BC0EB" }]} />
           <Text style={styles.legendText}>Airports</Text>
         </View>
         {userCountryCode && (
@@ -363,6 +455,49 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
   },
+  customMarker: {
+    alignItems: "center",
+  },
+  markerPin: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  markerPinSelected: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+  },
+  markerIcon: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  markerInnerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF",
+  },
+  markerTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    marginTop: -2,
+  },
   legend: {
     position: "absolute",
     bottom: 16,
@@ -397,9 +532,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   controlButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: "rgba(15, 23, 42, 0.9)",
     alignItems: "center",
     justifyContent: "center",
@@ -479,7 +614,7 @@ const styles = StyleSheet.create({
   },
   webMapContainer: {
     flex: 1,
-    backgroundColor: "#0A1628",
+    backgroundColor: "#0d1b2a",
   },
   mapHeader: {
     padding: 16,
@@ -499,7 +634,7 @@ const styles = StyleSheet.create({
   mapArea: {
     flex: 1,
     margin: 16,
-    backgroundColor: "rgba(15, 23, 42, 0.8)",
+    backgroundColor: "#1b4965",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(0, 212, 255, 0.2)",
@@ -523,25 +658,50 @@ const styles = StyleSheet.create({
     width: 1,
     backgroundColor: "rgba(0, 212, 255, 0.05)",
   },
-  mapDot: {
+  webMarker: {
     position: "absolute" as const,
+    alignItems: "center",
+    zIndex: 5,
+  },
+  webMarkerSelected: {
+    zIndex: 10,
+  },
+  webMarkerPin: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  webMarkerIcon: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  mapDotSelected: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderColor: "#FFFFFF",
-    zIndex: 10,
+  webMarkerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  webMarkerTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    marginTop: -2,
   },
   mapDotLabel: {
     position: "absolute" as const,
     top: -24,
-    left: -12,
+    left: -6,
     backgroundColor: "rgba(15, 23, 42, 0.95)",
     paddingHorizontal: 6,
     paddingVertical: 2,

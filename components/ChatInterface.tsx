@@ -15,7 +15,7 @@ import { Send, Plane, AlertCircle, X } from "lucide-react-native";
 import { z } from "zod";
 import { createRorkTool, useRorkAgent } from "@rork-ai/toolkit-sdk";
 import { getFlights, Flight } from "@/services/aviationStack";
-import { Airport } from "@/constants/airports";
+import { CLOSED_AIRPORTS_INFO, Airport } from "@/constants/airports";
 import FlightCard from "./FlightCard";
 
 interface ChatInterfaceProps {
@@ -27,7 +27,9 @@ interface ChatInterfaceProps {
   onClearFlights?: () => void;
 }
 
-
+const closedAirportsList = Object.entries(CLOSED_AIRPORTS_INFO)
+  .map(([code, info]) => `${code}: ${info}`)
+  .join("\n");
 
 export default function ChatInterface({ 
   onFlightsFound, 
@@ -45,6 +47,21 @@ export default function ChatInterface({
   const [hasAutoSent, setHasAutoSent] = useState(false);
 
   const { messages, error, sendMessage, status } = useRorkAgent({
+    systemPrompt: `You are a flight search assistant. Help users find flights between airports. Be concise and direct in your responses. Do not use markdown formatting like asterisks, bullet points, or headers.
+
+When a user asks about flights, extract the origin and destination airports and call the get_flight_info tool.
+- If the user mentions a city name, identify the main airport IATA code (e.g., Warsaw = WAW, Amsterdam = AMS, New York = JFK)
+- If the user mentions a country, ask them to specify a city or use the main international airport
+
+IMPORTANT - CLOSED AIRPORTS:
+The following airports are currently closed and cannot be used for flights:
+${closedAirportsList}
+
+All Ukrainian airports have been closed since February 2022 due to the ongoing war. Ukrainian airspace remains closed to civilian traffic. If a user asks about flights to/from Ukraine or any Ukrainian city (Kyiv, Lviv, Odesa, Kharkiv, etc.), inform them that these airports are not operational and suggest nearby alternatives like Warsaw (WAW) or Krakow (KRK) in Poland.
+
+Common IATA codes: WAW (Warsaw), AMS (Amsterdam), JFK (New York), LHR (London), CDG (Paris), FRA (Frankfurt), DXB (Dubai), SIN (Singapore)
+
+Keep responses short and to the point. No bullet points or special formatting.`,
     tools: {
       get_flight_info: createRorkTool({
         description: "Get flight information between two airports using IATA codes",
@@ -70,11 +87,11 @@ export default function ChatInterface({
 
             if (result.error) {
               setIsSearching(false);
-              return JSON.stringify({
+              return {
                 success: false,
                 error: result.error,
                 message: `Error searching flights: ${result.error}`,
-              });
+              };
             }
 
             setIsSearching(false);
@@ -83,7 +100,7 @@ export default function ChatInterface({
               if (result.nextAvailableFlight) {
                 const nextFlight = result.nextAvailableFlight;
                 onFlightsFound?.([...foundFlights, nextFlight]);
-                return JSON.stringify({
+                return {
                   success: true,
                   flights: [{
                     flight: nextFlight.flight.iata,
@@ -93,13 +110,13 @@ export default function ChatInterface({
                     status: nextFlight.flightStatus,
                   }],
                   message: `No flights available right now, but found the next available flight: ${nextFlight.flight.iata} by ${nextFlight.airline.name} departing on ${nextFlight.departure.scheduled}`,
-                });
+                };
               }
-              return JSON.stringify({
+              return {
                 success: true,
                 flights: [],
                 message: `No scheduled flights found from ${toolInput.loc_origin} to ${toolInput.loc_destination}. This could be because there are no direct flights on this route, or no flights are scheduled in the near future.`,
-              });
+              };
             }
 
             onFlightsFound?.([...foundFlights, ...result.flights]);
@@ -112,19 +129,19 @@ export default function ChatInterface({
               status: f.flightStatus,
             }));
 
-            return JSON.stringify({
+            return {
               success: true,
               totalFlights: result.flights.length,
               flights: flightSummary,
               message: `Found ${result.flights.length} flights from ${toolInput.loc_origin} to ${toolInput.loc_destination}`,
-            });
+            };
           } catch (err) {
             console.error("[ChatInterface] Tool execution error:", err);
             setIsSearching(false);
-            return JSON.stringify({
+            return {
               success: false,
               error: err instanceof Error ? err.message : "Unknown error",
-            });
+            };
           }
         },
       }),
@@ -276,8 +293,8 @@ export default function ChatInterface({
             ) : (
               <Text style={styles.welcomeText}>
                 Ask me about flights! Try:{"\n\n"}
-                {`"Next flight from Warsaw to Amsterdam?"`}{"\n\n"}
-                {`"Flights from JFK to London"`}
+                "Next flight from Warsaw to Amsterdam?"{"\n\n"}
+                "Flights from JFK to London"
               </Text>
             )}
           </View>

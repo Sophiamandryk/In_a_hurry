@@ -159,7 +159,11 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
     return ((lon + 180) / 360) * mapWidth;
   }, []);
 
-  const getArcPoints = useCallback((start: Airport, end: Airport) => {
+  const getArcPoints = useCallback((start: Airport | null, end: Airport | null) => {
+    if (!start || !end) return [];
+    if (typeof start.latitude !== 'number' || typeof start.longitude !== 'number') return [];
+    if (typeof end.latitude !== 'number' || typeof end.longitude !== 'number') return [];
+    
     const points = [];
     const steps = 20;
     for (let i = 0; i <= steps; i++) {
@@ -167,23 +171,32 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
       const lat = start.latitude + (end.latitude - start.latitude) * t;
       const lon = start.longitude + (end.longitude - start.longitude) * t;
       const arc = Math.sin(t * Math.PI) * 30;
-      points.push({ x: lonToX(lon), y: latToY(lat) - arc });
+      const x = lonToX(lon);
+      const y = latToY(lat) - arc;
+      if (!isNaN(x) && !isNaN(y)) {
+        points.push({ x, y });
+      }
     }
     return points;
   }, [latToY, lonToX]);
 
   if (Platform.OS === "web") {
     const arcPoints = originAirport && destinationAirport ? getArcPoints(originAirport, destinationAirport) : [];
-    const pathD = arcPoints.length > 0 
+    const hasValidArc = arcPoints.length >= 2;
+    
+    const pathD = hasValidArc
       ? `M ${arcPoints[0].x} ${arcPoints[0].y} ` + arcPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
       : '';
 
-    const arrowAngle = arcPoints.length > 1 
+    const arrowAngle = hasValidArc
       ? Math.atan2(
           arcPoints[arcPoints.length - 1].y - arcPoints[arcPoints.length - 2].y,
           arcPoints[arcPoints.length - 1].x - arcPoints[arcPoints.length - 2].x
         ) * (180 / Math.PI)
       : 0;
+    
+    const midPointIndex = Math.floor(arcPoints.length / 2);
+    const midPoint = hasValidArc ? arcPoints[midPointIndex] : null;
 
     return (
       <View style={styles.container}>
@@ -243,10 +256,10 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
               );
             })}
 
-            {originAirport && destinationAirport && arcPoints.length > 0 && (
+            {originAirport && destinationAirport && hasValidArc && midPoint && (
               <>
                 <svg
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' } as any}
                 >
                   <defs>
                     <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -266,8 +279,8 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
                   style={[
                     styles.planeIcon,
                     { 
-                      left: arcPoints[Math.floor(arcPoints.length / 2)].x - 12,
-                      top: arcPoints[Math.floor(arcPoints.length / 2)].y - 12,
+                      left: midPoint.x - 12,
+                      top: midPoint.y - 12,
                       transform: [{ rotate: `${arrowAngle}deg` }],
                     }
                   ]}

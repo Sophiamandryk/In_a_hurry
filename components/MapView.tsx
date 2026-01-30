@@ -106,14 +106,25 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   const handleAirportPress = useCallback((airport: Airport) => {
     console.log("[MapView] Airport selected:", airport.iata);
     setSelectedAirport(airport);
-    onAirportSelect?.(airport);
-
-    mapRef.current?.animateToRegion({
-      latitude: airport.latitude,
-      longitude: airport.longitude,
-      latitudeDelta: 15,
-      longitudeDelta: 15,
-    }, 500);
+    
+    // Defer animation to avoid conflicts with marker press event
+    setTimeout(() => {
+      try {
+        mapRef.current?.animateToRegion({
+          latitude: airport.latitude,
+          longitude: airport.longitude,
+          latitudeDelta: 15,
+          longitudeDelta: 15,
+        }, 500);
+      } catch (error) {
+        console.log("[MapView] Animation error:", error);
+      }
+    }, 100);
+    
+    // Defer callback to avoid state conflicts
+    setTimeout(() => {
+      onAirportSelect?.(airport);
+    }, 50);
   }, [onAirportSelect]);
 
   const getMarkerColor = useCallback((airport: Airport): string => {
@@ -372,9 +383,13 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
                 latitude: airport.latitude,
                 longitude: airport.longitude,
               }}
-              onPress={() => handleAirportPress(airport)}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                handleAirportPress(airport);
+              }}
               tracksViewChanges={false}
               anchor={{ x: 0.5, y: 1 }}
+              stopPropagation={true}
             >
               <View style={styles.customMarker}>
                 <View style={[

@@ -155,11 +155,18 @@ Keep responses short and to the point. No bullet points or special formatting.`,
   }, [messages]);
 
   useEffect(() => {
-    if (originAirport && destinationAirport && !hasPrefilledPrompt) {
+    if (originAirport && !hasPrefilledPrompt) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
       const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-      const prompt = `Find flights from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time: ${timeStr}, ${dateStr}.`;
+      
+      let prompt: string;
+      if (destinationAirport) {
+        prompt = `Find flights from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time: ${timeStr}, ${dateStr}.`;
+      } else {
+        prompt = `Find flights departing from ${originAirport.iata} (${originAirport.city}). Current time: ${timeStr}, ${dateStr}.`;
+      }
+      
       console.log("[ChatInterface] Pre-filling prompt:", prompt);
       setInput(prompt);
       setHasPrefilledPrompt(true);

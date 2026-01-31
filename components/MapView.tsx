@@ -114,9 +114,19 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
                 { latitude: originAirport.latitude, longitude: originAirport.longitude },
                 { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
               ]}
-              strokeColor="#00D4FF"
-              strokeWidth={4}
+              strokeColor="rgba(0, 212, 255, 0.3)"
+              strokeWidth={8}
               geodesic={true}
+            />
+            <Polyline
+              coordinates={[
+                { latitude: originAirport.latitude, longitude: originAirport.longitude },
+                { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
+              ]}
+              strokeColor="#00D4FF"
+              strokeWidth={3}
+              geodesic={true}
+              lineDashPattern={[10, 5]}
             />
             {(() => {
               const lat1 = originAirport.latitude * Math.PI / 180;
@@ -127,11 +137,12 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
               const y = Math.sin(dLon) * Math.cos(lat2);
               const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
               const bearing = Math.atan2(y, x);
-              const arrowSize = 2.5;
-              const arrowLat = destinationAirport.latitude;
-              const arrowLon = destinationAirport.longitude;
-              const leftAngle = bearing + Math.PI + Math.PI / 6;
-              const rightAngle = bearing + Math.PI - Math.PI / 6;
+              const arrowSize = 4;
+              const arrowOffset = 1.5;
+              const arrowLat = destinationAirport.latitude + (arrowOffset * Math.cos(bearing + Math.PI)) / 111;
+              const arrowLon = destinationAirport.longitude + (arrowOffset * Math.sin(bearing + Math.PI)) / (111 * Math.cos(destinationAirport.latitude * Math.PI / 180));
+              const leftAngle = bearing + Math.PI + Math.PI / 5;
+              const rightAngle = bearing + Math.PI - Math.PI / 5;
               const leftLat = arrowLat + (arrowSize * Math.cos(leftAngle)) / 111;
               const leftLon = arrowLon + (arrowSize * Math.sin(leftAngle)) / (111 * Math.cos(arrowLat * Math.PI / 180));
               const rightLat = arrowLat + (arrowSize * Math.cos(rightAngle)) / 111;
@@ -144,7 +155,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
                     { latitude: rightLat, longitude: rightLon },
                   ]}
                   fillColor="#00D4FF"
-                  strokeColor="#00D4FF"
+                  strokeColor="#FFFFFF"
                   strokeWidth={2}
                 />
               );

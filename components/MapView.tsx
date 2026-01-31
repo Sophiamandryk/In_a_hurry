@@ -383,13 +383,15 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
                 latitude: airport.latitude,
                 longitude: airport.longitude,
               }}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                handleAirportPress(airport);
+              onPress={() => {
+                try {
+                  handleAirportPress(airport);
+                } catch (error) {
+                  console.log('[MapView] Marker press error:', error);
+                }
               }}
               tracksViewChanges={false}
               anchor={{ x: 0.5, y: 1 }}
-              stopPropagation={true}
             >
               <View style={styles.customMarker}>
                 <View style={[

@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   Text,
 } from "react-native";
-import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT, Polygon } from "react-native-maps";
+import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
 
@@ -27,22 +27,17 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
   const mapRef = useRef<RNMapView>(null);
 
-
   const handleAirportPress = useCallback((airport: Airport) => {
     console.log("[MapView] Airport selected:", airport.iata);
     setSelectedAirport(airport);
     onAirportSelect?.(airport);
 
-    try {
-      mapRef.current?.animateToRegion({
-        latitude: airport.latitude,
-        longitude: airport.longitude,
-        latitudeDelta: 15,
-        longitudeDelta: 15,
-      }, 500);
-    } catch (error) {
-      console.log("[MapView] animateToRegion error:", error);
-    }
+    mapRef.current?.animateToRegion({
+      latitude: airport.latitude,
+      longitude: airport.longitude,
+      latitudeDelta: 15,
+      longitudeDelta: 15,
+    }, 500);
   }, [onAirportSelect]);
 
   const getMarkerColor = useCallback((airport: Airport): string => {
@@ -52,41 +47,29 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   }, [userCountryCode]);
 
   const zoomIn = useCallback(() => {
-    try {
-      mapRef.current?.getCamera().then((camera) => {
-        if (camera) {
-          mapRef.current?.animateCamera({
-            ...camera,
-            zoom: (camera.zoom || 1) + 1,
-          }, { duration: 300 });
-        }
-      }).catch((e) => console.log("[MapView] zoomIn error:", e));
-    } catch (error) {
-      console.log("[MapView] zoomIn error:", error);
-    }
+    mapRef.current?.getCamera().then((camera) => {
+      if (camera) {
+        mapRef.current?.animateCamera({
+          ...camera,
+          zoom: (camera.zoom || 1) + 1,
+        }, { duration: 300 });
+      }
+    });
   }, []);
 
   const zoomOut = useCallback(() => {
-    try {
-      mapRef.current?.getCamera().then((camera) => {
-        if (camera) {
-          mapRef.current?.animateCamera({
-            ...camera,
-            zoom: Math.max((camera.zoom || 1) - 1, 1),
-          }, { duration: 300 });
-        }
-      }).catch((e) => console.log("[MapView] zoomOut error:", e));
-    } catch (error) {
-      console.log("[MapView] zoomOut error:", error);
-    }
+    mapRef.current?.getCamera().then((camera) => {
+      if (camera) {
+        mapRef.current?.animateCamera({
+          ...camera,
+          zoom: Math.max((camera.zoom || 1) - 1, 1),
+        }, { duration: 300 });
+      }
+    });
   }, []);
 
   const resetView = useCallback(() => {
-    try {
-      mapRef.current?.animateToRegion(INITIAL_REGION, 500);
-    } catch (error) {
-      console.log("[MapView] resetView error:", error);
-    }
+    mapRef.current?.animateToRegion(INITIAL_REGION, 500);
     setSelectedAirport(null);
   }, []);
 
@@ -124,59 +107,16 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
         })}
 
         {originAirport && destinationAirport && (
-          <>
-            <Polyline
-              coordinates={[
-                { latitude: originAirport.latitude, longitude: originAirport.longitude },
-                { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
-              ]}
-              strokeColor="rgba(0, 212, 255, 0.3)"
-              strokeWidth={8}
-              geodesic={true}
-            />
-            <Polyline
-              coordinates={[
-                { latitude: originAirport.latitude, longitude: originAirport.longitude },
-                { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
-              ]}
-              strokeColor="#00D4FF"
-              strokeWidth={3}
-              geodesic={true}
-              lineDashPattern={[10, 5]}
-            />
-            {(() => {
-              const lat1 = originAirport.latitude * Math.PI / 180;
-              const lon1 = originAirport.longitude * Math.PI / 180;
-              const lat2 = destinationAirport.latitude * Math.PI / 180;
-              const lon2 = destinationAirport.longitude * Math.PI / 180;
-              const dLon = lon2 - lon1;
-              const y = Math.sin(dLon) * Math.cos(lat2);
-              const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-              const bearing = Math.atan2(y, x);
-              const arrowSize = 4;
-              const arrowOffset = 1.5;
-              const arrowLat = destinationAirport.latitude + (arrowOffset * Math.cos(bearing + Math.PI)) / 111;
-              const arrowLon = destinationAirport.longitude + (arrowOffset * Math.sin(bearing + Math.PI)) / (111 * Math.cos(destinationAirport.latitude * Math.PI / 180));
-              const leftAngle = bearing + Math.PI + Math.PI / 5;
-              const rightAngle = bearing + Math.PI - Math.PI / 5;
-              const leftLat = arrowLat + (arrowSize * Math.cos(leftAngle)) / 111;
-              const leftLon = arrowLon + (arrowSize * Math.sin(leftAngle)) / (111 * Math.cos(arrowLat * Math.PI / 180));
-              const rightLat = arrowLat + (arrowSize * Math.cos(rightAngle)) / 111;
-              const rightLon = arrowLon + (arrowSize * Math.sin(rightAngle)) / (111 * Math.cos(arrowLat * Math.PI / 180));
-              return (
-                <Polygon
-                  coordinates={[
-                    { latitude: arrowLat, longitude: arrowLon },
-                    { latitude: leftLat, longitude: leftLon },
-                    { latitude: rightLat, longitude: rightLon },
-                  ]}
-                  fillColor="#00D4FF"
-                  strokeColor="#FFFFFF"
-                  strokeWidth={2}
-                />
-              );
-            })()}
-          </>
+          <Polyline
+            coordinates={[
+              { latitude: originAirport.latitude, longitude: originAirport.longitude },
+              { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
+            ]}
+            strokeColor="#00D4FF"
+            strokeWidth={3}
+            lineDashPattern={[10, 5]}
+            geodesic={true}
+          />
         )}
       </RNMapView>
 
@@ -355,179 +295,5 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontStyle: "italic" as const,
     lineHeight: 18,
-  },
-  webContainer: {
-    flex: 1,
-    backgroundColor: "#0F172A",
-  },
-  webHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 212, 255, 0.15)",
-  },
-  webTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "700" as const,
-    marginBottom: 12,
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(30, 41, 59, 0.8)",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.2)",
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    color: "#FFFFFF",
-    fontSize: 14,
-    paddingVertical: 12,
-  },
-  routeIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 212, 255, 0.1)",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.3)",
-  },
-  routeAirport: {
-    alignItems: "center",
-    flex: 1,
-  },
-  routeIata: {
-    color: "#00D4FF",
-    fontSize: 20,
-    fontWeight: "800" as const,
-  },
-  routeCity: {
-    color: "#94A3B8",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  routeArrow: {
-    paddingHorizontal: 16,
-  },
-  routeArrowText: {
-    fontSize: 18,
-  },
-  airportList: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  airportItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "rgba(30, 41, 59, 0.6)",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "rgba(100, 116, 139, 0.2)",
-  },
-  airportItemSelected: {
-    borderColor: "rgba(0, 212, 255, 0.5)",
-    backgroundColor: "rgba(0, 212, 255, 0.1)",
-  },
-  airportItemOrigin: {
-    borderColor: "rgba(74, 222, 128, 0.5)",
-    backgroundColor: "rgba(74, 222, 128, 0.1)",
-  },
-  airportItemDestination: {
-    borderColor: "rgba(255, 184, 0, 0.5)",
-    backgroundColor: "rgba(255, 184, 0, 0.1)",
-  },
-  airportItemClosed: {
-    opacity: 0.6,
-  },
-  airportItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  airportDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 12,
-  },
-  airportItemHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  airportIata: {
-    color: "#00D4FF",
-    fontSize: 16,
-    fontWeight: "700" as const,
-  },
-  originBadge: {
-    color: "#4ADE80",
-    fontSize: 10,
-    fontWeight: "700" as const,
-    backgroundColor: "rgba(74, 222, 128, 0.2)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  destBadge: {
-    color: "#FFB800",
-    fontSize: 10,
-    fontWeight: "700" as const,
-    backgroundColor: "rgba(255, 184, 0, 0.2)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  airportCity: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500" as const,
-    marginTop: 2,
-  },
-  airportName: {
-    color: "#64748B",
-    fontSize: 11,
-    marginTop: 1,
-  },
-  airportItemRight: {
-    alignItems: "flex-end",
-  },
-  airportCountry: {
-    color: "#94A3B8",
-    fontSize: 12,
-  },
-  closedBadgeSmall: {
-    backgroundColor: "rgba(255, 68, 68, 0.2)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  closedTextSmall: {
-    color: "#FF4444",
-    fontSize: 9,
-    fontWeight: "700" as const,
-  },
-  webLegend: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 20,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0, 212, 255, 0.15)",
   },
 });

@@ -38,8 +38,6 @@ export interface FlightSearchResult {
 const AVIATIONSTACK_API_KEY = process.env.EXPO_PUBLIC_AVIATIONSTACK_API_KEY;
 const BASE_URL = "http://api.aviationstack.com/v1";
 
-console.log("[AviationStack] API Key configured:", AVIATIONSTACK_API_KEY ? `Yes (${AVIATIONSTACK_API_KEY.substring(0, 8)}...)` : "No");
-
 export async function getFlights(
   depIata: string,
   arrIata: string
@@ -63,17 +61,12 @@ export async function getFlights(
     let data = await response.json();
 
     console.log("[AviationStack] Response status:", response.status);
-    console.log("[AviationStack] Full response data:", JSON.stringify(data, null, 2));
 
     if (data.error) {
       console.error("[AviationStack] API Error:", data.error);
-      const errorCode = data.error.code;
-      const errorType = data.error.type;
-      const errorInfo = data.error.info;
-      console.error(`[AviationStack] Error details - Code: ${errorCode}, Type: ${errorType}, Info: ${errorInfo}`);
       return {
         flights: [],
-        error: `${data.error.message || "Failed to fetch flight data"} (Code: ${errorCode})`,
+        error: data.error.message || "Failed to fetch flight data",
       };
     }
 

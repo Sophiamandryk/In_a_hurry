@@ -46,7 +46,6 @@ export default function FlightSearchScreen() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
   const [recentFlights, setRecentFlights] = useState<Flight[]>([]);
-  const [chatFlights, setChatFlights] = useState<Flight[]>([]);
   const [userCountryCode, setUserCountryCode] = useState<string | null>(null);
   const [locationRequested, setLocationRequested] = useState(false);
   const [destinationAirport, setDestinationAirport] = useState<Airport | null>(null);
@@ -173,11 +172,6 @@ export default function FlightSearchScreen() {
   const handleFlightsFound = useCallback((flights: Flight[]) => {
     console.log("[FlightSearch] Flights found:", flights.length);
     setRecentFlights(flights);
-    setChatFlights(flights);
-  }, []);
-
-  const handleClearFlights = useCallback(() => {
-    setChatFlights([]);
   }, []);
 
   const toggleChat = useCallback(() => {
@@ -384,8 +378,6 @@ export default function FlightSearchScreen() {
             originAirport={selectedAirport}
             destinationAirport={destinationAirport}
             onClearSelection={handleClearSelection}
-            persistedFlights={chatFlights}
-            onClearFlights={handleClearFlights}
           />
       </View>
     </View>

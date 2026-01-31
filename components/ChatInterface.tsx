@@ -23,8 +23,6 @@ interface ChatInterfaceProps {
   originAirport?: Airport | null;
   destinationAirport?: Airport | null;
   onClearSelection?: () => void;
-  persistedFlights?: Flight[];
-  onClearFlights?: () => void;
 }
 
 const closedAirportsList = Object.entries(CLOSED_AIRPORTS_INFO)
@@ -35,16 +33,14 @@ export default function ChatInterface({
   onFlightsFound, 
   originAirport, 
   destinationAirport,
-  onClearSelection,
-  persistedFlights = [],
-  onClearFlights
+  onClearSelection 
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
+  const [foundFlights, setFoundFlights] = useState<Flight[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const foundFlights = persistedFlights;
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
-  const [hasPrefilledPrompt, setHasPrefilledPrompt] = useState(false);
+  const [hasAutoSent, setHasAutoSent] = useState(false);
 
   const { messages, error, sendMessage, status } = useRorkAgent({
     systemPrompt: `You are a flight search assistant. Help users find flights between airports. Be concise and direct in your responses. Do not use markdown formatting like asterisks, bullet points, or headers.
@@ -99,7 +95,12 @@ Keep responses short and to the point. No bullet points or special formatting.`,
             if (result.flights.length === 0) {
               if (result.nextAvailableFlight) {
                 const nextFlight = result.nextAvailableFlight;
-                onFlightsFound?.([...foundFlights, nextFlight]);
+                // Accumulate flights instead of overwriting
+                setFoundFlights(prev => {
+                  const newFlights = [...prev, nextFlight];
+                  onFlightsFound?.(newFlights);
+                  return newFlights;
+                });
                 return {
                   success: true,
                   flights: [{
@@ -119,7 +120,12 @@ Keep responses short and to the point. No bullet points or special formatting.`,
               };
             }
 
-            onFlightsFound?.([...foundFlights, ...result.flights]);
+            // Accumulate flights instead of overwriting
+            setFoundFlights(prev => {
+              const newFlights = [...prev, ...result.flights];
+              onFlightsFound?.(newFlights);
+              return newFlights;
+            });
 
             const flightSummary = result.flights.slice(0, 5).map((f) => ({
               flight: f.flight.iata,
@@ -155,37 +161,28 @@ Keep responses short and to the point. No bullet points or special formatting.`,
   }, [messages]);
 
   useEffect(() => {
-    if (originAirport && !hasPrefilledPrompt) {
+    if (originAirport && destinationAirport && !hasAutoSent) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
       const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-      
-      let prompt: string;
-      if (destinationAirport) {
-        prompt = `Find flights from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time: ${timeStr}, ${dateStr}.`;
-      } else {
-        prompt = `Find flights departing from ${originAirport.iata} (${originAirport.city}). Current time: ${timeStr}, ${dateStr}.`;
-      }
-      
-      console.log("[ChatInterface] Pre-filling prompt:", prompt);
-      setInput(prompt);
-      setHasPrefilledPrompt(true);
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 300);
+      const prompt = `Find the next available flight from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time is ${timeStr} on ${dateStr}. If no flights are available now, find the closest upcoming flight.`;
+      console.log("[ChatInterface] Auto-sending prompt:", prompt);
+      setFoundFlights([]);
+      sendMessage(prompt);
+      setHasAutoSent(true);
     }
-  }, [originAirport, destinationAirport, hasPrefilledPrompt]);
+  }, [originAirport, destinationAirport, hasAutoSent, sendMessage]);
 
   useEffect(() => {
     if (!originAirport || !destinationAirport) {
-      setHasPrefilledPrompt(false);
+      setHasAutoSent(false);
     }
   }, [originAirport, destinationAirport]);
 
   const handleSend = () => {
     if (!input.trim()) return;
     console.log("[ChatInterface] Sending message:", input);
-    onClearFlights?.();
+    setFoundFlights([]);
     sendMessage(input);
     setInput("");
     Keyboard.dismiss();

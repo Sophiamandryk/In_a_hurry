@@ -4,8 +4,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Text,
+  Platform,
+  ScrollView,
+  TextInput,
 } from "react-native";
 import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import { Search } from "lucide-react-native";
 import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
 
@@ -25,6 +29,7 @@ const INITIAL_REGION = {
 
 export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const mapRef = useRef<RNMapView>(null);
 
 
@@ -33,13 +38,122 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
     setSelectedAirport(airport);
     onAirportSelect?.(airport);
 
-    mapRef.current?.animateToRegion({
-      latitude: airport.latitude,
-      longitude: airport.longitude,
-      latitudeDelta: 15,
-      longitudeDelta: 15,
-    }, 500);
+    if (Platform.OS !== "web" && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: airport.latitude,
+        longitude: airport.longitude,
+        latitudeDelta: 15,
+        longitudeDelta: 15,
+      }, 500);
+    }
   }, [onAirportSelect]);
+
+  const filteredAirports = MAJOR_AIRPORTS.filter((airport) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      airport.iata.toLowerCase().includes(query) ||
+      airport.city.toLowerCase().includes(query) ||
+      airport.country.toLowerCase().includes(query) ||
+      airport.name.toLowerCase().includes(query)
+    );
+  });
+
+  if (Platform.OS === "web") {
+    return (
+      <View style={styles.webContainer}>
+        <View style={styles.webHeader}>
+          <Text style={styles.webTitle}>Select Airport</Text>
+          <View style={styles.searchContainer}>
+            <Search size={18} color="#64748B" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search airports..."
+              placeholderTextColor="#64748B"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </View>
+
+        {originAirport && destinationAirport && (
+          <View style={styles.routeIndicator}>
+            <View style={styles.routeAirport}>
+              <Text style={styles.routeIata}>{originAirport.iata}</Text>
+              <Text style={styles.routeCity}>{originAirport.city}</Text>
+            </View>
+            <View style={styles.routeArrow}>
+              <Text style={styles.routeArrowText}>✈️</Text>
+            </View>
+            <View style={styles.routeAirport}>
+              <Text style={styles.routeIata}>{destinationAirport.iata}</Text>
+              <Text style={styles.routeCity}>{destinationAirport.city}</Text>
+            </View>
+          </View>
+        )}
+
+        <ScrollView style={styles.airportList} showsVerticalScrollIndicator={false}>
+          {filteredAirports.map((airport) => {
+            const isOrigin = originAirport?.iata === airport.iata;
+            const isDestination = destinationAirport?.iata === airport.iata;
+            const isSelected = selectedAirport?.iata === airport.iata;
+
+            return (
+              <TouchableOpacity
+                key={airport.iata}
+                style={[
+                  styles.airportItem,
+                  isSelected && styles.airportItemSelected,
+                  isOrigin && styles.airportItemOrigin,
+                  isDestination && styles.airportItemDestination,
+                  !airport.operational && styles.airportItemClosed,
+                ]}
+                onPress={() => handleAirportPress(airport)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.airportItemLeft}>
+                  <View style={[styles.airportDot, { backgroundColor: getMarkerColor(airport) }]} />
+                  <View>
+                    <View style={styles.airportItemHeader}>
+                      <Text style={styles.airportIata}>{airport.iata}</Text>
+                      {isOrigin && <Text style={styles.originBadge}>ORIGIN</Text>}
+                      {isDestination && <Text style={styles.destBadge}>DEST</Text>}
+                    </View>
+                    <Text style={styles.airportCity}>{airport.city}</Text>
+                    <Text style={styles.airportName} numberOfLines={1}>{airport.name}</Text>
+                  </View>
+                </View>
+                <View style={styles.airportItemRight}>
+                  <Text style={styles.airportCountry}>{airport.country}</Text>
+                  {!airport.operational && (
+                    <View style={styles.closedBadgeSmall}>
+                      <Text style={styles.closedTextSmall}>CLOSED</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.webLegend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#00D4FF" }]} />
+            <Text style={styles.legendText}>Airports</Text>
+          </View>
+          {userCountryCode && (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#4ADE80" }]} />
+              <Text style={styles.legendText}>Your country</Text>
+            </View>
+          )}
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#FF4444" }]} />
+            <Text style={styles.legendText}>Closed</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   const getMarkerColor = useCallback((airport: Airport): string => {
     if (!airport.operational) return "#FF4444";

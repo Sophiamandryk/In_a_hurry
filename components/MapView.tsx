@@ -5,6 +5,8 @@ import {
   TouchableOpacity,
   Text,
   Platform,
+  Image,
+  PanResponder,
 } from "react-native";
 import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
@@ -24,25 +26,29 @@ const INITIAL_REGION = {
   longitudeDelta: 100,
 };
 
-const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
+const STATIC_MAP_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Equirectangular-projection.jpg/2560px-Equirectangular-projection.jpg";
+
+const MAP_WIDTH = 2560;
+const MAP_HEIGHT = 1280;
+
+function latLngToPixel(lat: number, lng: number, scale: number, offsetX: number, offsetY: number) {
+  const x = ((lng + 180) / 360) * MAP_WIDTH * scale + offsetX;
+  const y = ((90 - lat) / 180) * MAP_HEIGHT * scale + offsetY;
+  return { x, y };
+}
 
 function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
-  const polylineRef = useRef<google.maps.Polyline | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  
+  const lastPanRef = useRef({ x: 0, y: 0 });
 
   const handleAirportPress = useCallback((airport: Airport) => {
     console.log("[WebMapView] Airport selected:", airport.iata);
     setSelectedAirport(airport);
     onAirportSelect?.(airport);
-    
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.panTo({ lat: airport.latitude, lng: airport.longitude });
-      mapInstanceRef.current.setZoom(6);
-    }
   }, [onAirportSelect]);
 
   const getMarkerColor = useCallback((airport: Airport): string => {
@@ -51,130 +57,167 @@ function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinati
     return "#00D4FF";
   }, [userCountryCode]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  const getMarkerSize = useCallback((airport: Airport): number => {
+    if (originAirport?.iata === airport.iata) return 16;
+    if (destinationAirport?.iata === airport.iata) return 16;
+    if (selectedAirport?.iata === airport.iata) return 14;
+    return 10;
+  }, [originAirport, destinationAirport, selectedAirport]);
 
-    const loadGoogleMaps = () => {
-      if ((window as any).google?.maps) {
-        setMapLoaded(true);
-        return;
-      }
-
-      const existingScript = document.getElementById('google-maps-script');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => setMapLoaded(true));
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.id = 'google-maps-script';
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
-      script.async = true;
-      script.defer = true;
-      script.onload = () => setMapLoaded(true);
-      script.onerror = () => console.error('[WebMapView] Failed to load Google Maps');
-      document.head.appendChild(script);
-    };
-
-    loadGoogleMaps();
+  const handleLayout = useCallback((event: any) => {
+    const { width, height } = event.nativeEvent.layout;
+    setContainerSize({ width, height });
+    
+    const scaleX = width / MAP_WIDTH;
+    const scaleY = height / MAP_HEIGHT;
+    const initialScale = Math.max(scaleX, scaleY) * 1.2;
+    setScale(initialScale);
+    
+    const scaledWidth = MAP_WIDTH * initialScale;
+    const scaledHeight = MAP_HEIGHT * initialScale;
+    setOffset({
+      x: (width - scaledWidth) / 2,
+      y: (height - scaledHeight) / 2,
+    });
   }, []);
 
-  useEffect(() => {
-    if (!mapLoaded || !mapContainerRef.current || mapInstanceRef.current) return;
-
-    const google = (window as any).google;
-    if (!google?.maps) return;
-
-    mapInstanceRef.current = new google.maps.Map(mapContainerRef.current, {
-      center: { lat: 30, lng: 0 },
-      zoom: 2,
-      styles: [
-        { elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
-        { elementType: 'labels.text.stroke', stylers: [{ color: '#1e293b' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
-        { featureType: 'road', stylers: [{ visibility: 'off' }] },
-        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-      ],
-      disableDefaultUI: true,
-      zoomControl: false,
-    });
-
-    MAJOR_AIRPORTS.forEach((airport) => {
-      const marker = new google.maps.Marker({
-        position: { lat: airport.latitude, lng: airport.longitude },
-        map: mapInstanceRef.current,
-        title: `${airport.iata} - ${airport.city}`,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: getMarkerColor(airport),
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 2,
-        },
-      });
-
-      marker.addListener('click', () => handleAirportPress(airport));
-      markersRef.current.push(marker);
-    });
-  }, [mapLoaded, getMarkerColor, handleAirportPress]);
-
-  useEffect(() => {
-    if (!mapInstanceRef.current || !mapLoaded) return;
-
-    const google = (window as any).google;
-    if (!google?.maps) return;
-
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-    }
-    polylineRef.current = null;
-
-    if (originAirport && destinationAirport) {
-      polylineRef.current = new google.maps.Polyline({
-        path: [
-          { lat: originAirport.latitude, lng: originAirport.longitude },
-          { lat: destinationAirport.latitude, lng: destinationAirport.longitude },
-        ],
-        geodesic: true,
-        strokeColor: '#00D4FF',
-        strokeOpacity: 1,
-        strokeWeight: 3,
-      });
-      polylineRef.current.setMap(mapInstanceRef.current);
-
-      const bounds = new google.maps.LatLngBounds();
-      bounds.extend({ lat: originAirport.latitude, lng: originAirport.longitude });
-      bounds.extend({ lat: destinationAirport.latitude, lng: destinationAirport.longitude });
-      mapInstanceRef.current.fitBounds(bounds, 50);
-    }
-  }, [originAirport, destinationAirport, mapLoaded]);
-
   const zoomIn = useCallback(() => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.setZoom((mapInstanceRef.current.getZoom() || 2) + 1);
-    }
+    setScale(prev => Math.min(prev * 1.3, 4));
   }, []);
 
   const zoomOut = useCallback(() => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.setZoom(Math.max((mapInstanceRef.current.getZoom() || 2) - 1, 1));
-    }
+    setScale(prev => Math.max(prev / 1.3, 0.5));
   }, []);
 
   const resetView = useCallback(() => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.setCenter({ lat: 30, lng: 0 });
-      mapInstanceRef.current.setZoom(2);
-    }
+    const scaleX = containerSize.width / MAP_WIDTH;
+    const scaleY = containerSize.height / MAP_HEIGHT;
+    const initialScale = Math.max(scaleX, scaleY) * 1.2;
+    setScale(initialScale);
+    
+    const scaledWidth = MAP_WIDTH * initialScale;
+    const scaledHeight = MAP_HEIGHT * initialScale;
+    setOffset({
+      x: (containerSize.width - scaledWidth) / 2,
+      y: (containerSize.height - scaledHeight) / 2,
+    });
     setSelectedAirport(null);
-  }, []);
+  }, [containerSize]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        lastPanRef.current = { x: offset.x, y: offset.y };
+        
+      },
+      onPanResponderMove: (_, gestureState) => {
+        setOffset({
+          x: lastPanRef.current.x + gestureState.dx,
+          y: lastPanRef.current.y + gestureState.dy,
+        });
+      },
+      onPanResponderRelease: () => {},
+    })
+  ).current;
+
+  useEffect(() => {
+    lastPanRef.current = { x: offset.x, y: offset.y };
+  }, [offset]);
+
+  const renderFlightPath = useCallback(() => {
+    if (!originAirport || !destinationAirport) return null;
+
+    const start = latLngToPixel(originAirport.latitude, originAirport.longitude, scale, offset.x, offset.y);
+    const end = latLngToPixel(destinationAirport.latitude, destinationAirport.longitude, scale, offset.x, offset.y);
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    return (
+      <View
+        style={{
+          position: 'absolute',
+          left: start.x,
+          top: start.y,
+          width: distance,
+          height: 3,
+          backgroundColor: '#00D4FF',
+          transform: [{ rotate: `${angle}deg` }],
+          transformOrigin: 'left center',
+          opacity: 0.8,
+          borderRadius: 2,
+          shadowColor: '#00D4FF',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.8,
+          shadowRadius: 6,
+        }}
+      />
+    );
+  }, [originAirport, destinationAirport, scale, offset]);
 
   return (
-    <View style={styles.container}>
-      <div ref={mapContainerRef as any} style={{ width: '100%', height: '100%', position: 'absolute' }} />
-      
+    <View style={styles.container} onLayout={handleLayout}>
+      <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
+        <Image
+          source={{ uri: STATIC_MAP_URL }}
+          style={{
+            position: 'absolute',
+            left: offset.x,
+            top: offset.y,
+            width: MAP_WIDTH * scale,
+            height: MAP_HEIGHT * scale,
+          }}
+          resizeMode="cover"
+        />
+        
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10, 22, 40, 0.6)' }]} pointerEvents="none" />
+
+        {renderFlightPath()}
+
+        {MAJOR_AIRPORTS.map((airport) => {
+          const pos = latLngToPixel(airport.latitude, airport.longitude, scale, offset.x, offset.y);
+          const markerColor = getMarkerColor(airport);
+          const markerSize = getMarkerSize(airport);
+          const isSelected = selectedAirport?.iata === airport.iata;
+          const isOrigin = originAirport?.iata === airport.iata;
+          const isDestination = destinationAirport?.iata === airport.iata;
+
+          if (pos.x < -20 || pos.x > containerSize.width + 20 || 
+              pos.y < -20 || pos.y > containerSize.height + 20) {
+            return null;
+          }
+
+          return (
+            <TouchableOpacity
+              key={airport.iata}
+              style={{
+                position: 'absolute',
+                left: pos.x - markerSize / 2,
+                top: pos.y - markerSize / 2,
+                width: markerSize,
+                height: markerSize,
+                borderRadius: markerSize / 2,
+                backgroundColor: markerColor,
+                borderWidth: (isSelected || isOrigin || isDestination) ? 3 : 2,
+                borderColor: isOrigin ? '#4ADE80' : isDestination ? '#FFB800' : '#FFFFFF',
+                shadowColor: markerColor,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.8,
+                shadowRadius: (isSelected || isOrigin || isDestination) ? 8 : 4,
+                elevation: 5,
+                zIndex: (isSelected || isOrigin || isDestination) ? 100 : 10,
+              }}
+              onPress={() => handleAirportPress(airport)}
+              activeOpacity={0.7}
+            />
+          );
+        })}
+      </View>
+
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: "#00D4FF" }]} />

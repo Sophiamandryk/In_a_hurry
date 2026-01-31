@@ -44,7 +44,7 @@ export default function ChatInterface({
   const foundFlights = persistedFlights;
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
-  const [hasAutoSent, setHasAutoSent] = useState(false);
+  const [hasPrefilledPrompt, setHasPrefilledPrompt] = useState(false);
 
   const { messages, error, sendMessage, status } = useRorkAgent({
     systemPrompt: `You are a flight search assistant. Help users find flights between airports. Be concise and direct in your responses. Do not use markdown formatting like asterisks, bullet points, or headers.
@@ -155,21 +155,23 @@ Keep responses short and to the point. No bullet points or special formatting.`,
   }, [messages]);
 
   useEffect(() => {
-    if (originAirport && destinationAirport && !hasAutoSent) {
+    if (originAirport && destinationAirport && !hasPrefilledPrompt) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
       const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-      const prompt = `Find the next available flight from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time is ${timeStr} on ${dateStr}. If no flights are available now, find the closest upcoming flight.`;
-      console.log("[ChatInterface] Auto-sending prompt:", prompt);
-      onClearFlights?.();
-      sendMessage(prompt);
-      setHasAutoSent(true);
+      const prompt = `Find flights from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time: ${timeStr}, ${dateStr}.`;
+      console.log("[ChatInterface] Pre-filling prompt:", prompt);
+      setInput(prompt);
+      setHasPrefilledPrompt(true);
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 300);
     }
-  }, [originAirport, destinationAirport, hasAutoSent, sendMessage]);
+  }, [originAirport, destinationAirport, hasPrefilledPrompt]);
 
   useEffect(() => {
     if (!originAirport || !destinationAirport) {
-      setHasAutoSent(false);
+      setHasPrefilledPrompt(false);
     }
   }, [originAirport, destinationAirport]);
 

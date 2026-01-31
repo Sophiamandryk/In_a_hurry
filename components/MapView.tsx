@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   Text,
 } from "react-native";
-import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT, Polygon } from "react-native-maps";
 import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
 
@@ -108,16 +108,48 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
         })}
 
         {originAirport && destinationAirport && (
-          <Polyline
-            coordinates={[
-              { latitude: originAirport.latitude, longitude: originAirport.longitude },
-              { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
-            ]}
-            strokeColor="#00D4FF"
-            strokeWidth={3}
-            lineDashPattern={[10, 5]}
-            geodesic={true}
-          />
+          <>
+            <Polyline
+              coordinates={[
+                { latitude: originAirport.latitude, longitude: originAirport.longitude },
+                { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
+              ]}
+              strokeColor="#00D4FF"
+              strokeWidth={4}
+              geodesic={true}
+            />
+            {(() => {
+              const lat1 = originAirport.latitude * Math.PI / 180;
+              const lon1 = originAirport.longitude * Math.PI / 180;
+              const lat2 = destinationAirport.latitude * Math.PI / 180;
+              const lon2 = destinationAirport.longitude * Math.PI / 180;
+              const dLon = lon2 - lon1;
+              const y = Math.sin(dLon) * Math.cos(lat2);
+              const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+              const bearing = Math.atan2(y, x);
+              const arrowSize = 2.5;
+              const arrowLat = destinationAirport.latitude;
+              const arrowLon = destinationAirport.longitude;
+              const leftAngle = bearing + Math.PI + Math.PI / 6;
+              const rightAngle = bearing + Math.PI - Math.PI / 6;
+              const leftLat = arrowLat + (arrowSize * Math.cos(leftAngle)) / 111;
+              const leftLon = arrowLon + (arrowSize * Math.sin(leftAngle)) / (111 * Math.cos(arrowLat * Math.PI / 180));
+              const rightLat = arrowLat + (arrowSize * Math.cos(rightAngle)) / 111;
+              const rightLon = arrowLon + (arrowSize * Math.sin(rightAngle)) / (111 * Math.cos(arrowLat * Math.PI / 180));
+              return (
+                <Polygon
+                  coordinates={[
+                    { latitude: arrowLat, longitude: arrowLon },
+                    { latitude: leftLat, longitude: leftLon },
+                    { latitude: rightLat, longitude: rightLon },
+                  ]}
+                  fillColor="#00D4FF"
+                  strokeColor="#00D4FF"
+                  strokeWidth={2}
+                />
+              );
+            })()}
+          </>
         )}
       </RNMapView>
 

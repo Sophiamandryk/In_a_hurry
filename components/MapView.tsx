@@ -14,6 +14,7 @@ interface MapViewProps {
   userCountryCode?: string | null;
   originAirport?: Airport | null;
   destinationAirport?: Airport | null;
+  isSelectingDestination?: boolean;
 }
 
 const INITIAL_REGION = {
@@ -46,8 +47,8 @@ function getArcCoordinates(origin: Airport, destination: Airport, numPoints: num
   return coords;
 }
 
-export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
-  const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
+export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport, isSelectingDestination }: MapViewProps) {
+  const [tappedAirport, setTappedAirport] = useState<Airport | null>(null);
   const mapRef = useRef<RNMapView>(null);
 
   const routeData = useMemo(() => {
@@ -71,8 +72,8 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   }, [originAirport, destinationAirport]);
 
   const handleAirportPress = useCallback((airport: Airport) => {
-    console.log("[MapView] Airport selected:", airport.iata);
-    setSelectedAirport(airport);
+    console.log("[MapView] Airport pressed:", airport.iata, "isSelectingDestination:", isSelectingDestination);
+    setTappedAirport(airport);
     onAirportSelect?.(airport);
 
     mapRef.current?.animateToRegion({
@@ -81,7 +82,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
       latitudeDelta: 15,
       longitudeDelta: 15,
     }, 500);
-  }, [onAirportSelect]);
+  }, [onAirportSelect, isSelectingDestination]);
 
   const getMarkerColor = useCallback((airport: Airport): string => {
     if (!airport.operational) return "#FF4444";
@@ -113,7 +114,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
 
   const resetView = useCallback(() => {
     mapRef.current?.animateToRegion(INITIAL_REGION, 500);
-    setSelectedAirport(null);
+    setTappedAirport(null);
   }, []);
 
   return (
@@ -227,25 +228,25 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
         </TouchableOpacity>
       </View>
 
-      {selectedAirport && (
+      {tappedAirport && !originAirport && (
         <View style={styles.infoCard}>
           <View style={styles.infoHeader}>
             <View style={styles.infoLeft}>
-              <View style={[styles.statusDot, { backgroundColor: selectedAirport.operational ? "#4ADE80" : "#FF4444" }]} />
-              <Text style={styles.infoIata}>{selectedAirport.iata}</Text>
+              <View style={[styles.statusDot, { backgroundColor: tappedAirport.operational ? "#4ADE80" : "#FF4444" }]} />
+              <Text style={styles.infoIata}>{tappedAirport.iata}</Text>
             </View>
-            {!selectedAirport.operational && (
+            {!tappedAirport.operational && (
               <View style={styles.closedBadge}>
                 <AlertTriangle size={12} color="#FF4444" />
                 <Text style={styles.closedText}>CLOSED</Text>
               </View>
             )}
           </View>
-          <Text style={styles.infoCity}>{selectedAirport.city}</Text>
-          <Text style={styles.infoName}>{selectedAirport.name}</Text>
-          <Text style={styles.infoCountry}>{selectedAirport.country}</Text>
-          {selectedAirport.closureReason && (
-            <Text style={styles.closureReason}>{selectedAirport.closureReason}</Text>
+          <Text style={styles.infoCity}>{tappedAirport.city}</Text>
+          <Text style={styles.infoName}>{tappedAirport.name}</Text>
+          <Text style={styles.infoCountry}>{tappedAirport.country}</Text>
+          {tappedAirport.closureReason && (
+            <Text style={styles.closureReason}>{tappedAirport.closureReason}</Text>
           )}
         </View>
       )}

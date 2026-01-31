@@ -1,28 +1,13 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   Text,
-  Platform,
-  ScrollView,
-  TextInput,
 } from "react-native";
-import { Search, Plane, AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
+import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
-
-let RNMapView: any = null;
-let Marker: any = null;
-let Polyline: any = null;
-let PROVIDER_DEFAULT: any = null;
-
-if (Platform.OS !== 'web') {
-  const maps = require('react-native-maps');
-  RNMapView = maps.default;
-  Marker = maps.Marker;
-  Polyline = maps.Polyline;
-  PROVIDER_DEFAULT = maps.PROVIDER_DEFAULT;
-}
 
 interface MapViewProps {
   onAirportSelect?: (airport: Airport) => void;
@@ -40,20 +25,8 @@ const INITIAL_REGION = {
 
 export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<RNMapView>(null);
 
-  const filteredAirports = useMemo(() => {
-    if (!searchQuery.trim()) return MAJOR_AIRPORTS;
-    const query = searchQuery.toLowerCase();
-    return MAJOR_AIRPORTS.filter(
-      (airport) =>
-        airport.iata.toLowerCase().includes(query) ||
-        airport.city.toLowerCase().includes(query) ||
-        airport.country.toLowerCase().includes(query) ||
-        airport.name.toLowerCase().includes(query)
-    );
-  }, [searchQuery]);
 
   const handleAirportPress = useCallback((airport: Airport) => {
     console.log("[MapView] Airport selected:", airport.iata);
@@ -75,7 +48,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   }, [userCountryCode]);
 
   const zoomIn = useCallback(() => {
-    mapRef.current?.getCamera().then((camera: any) => {
+    mapRef.current?.getCamera().then((camera) => {
       if (camera) {
         mapRef.current?.animateCamera({
           ...camera,
@@ -86,7 +59,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   }, []);
 
   const zoomOut = useCallback(() => {
-    mapRef.current?.getCamera().then((camera: any) => {
+    mapRef.current?.getCamera().then((camera) => {
       if (camera) {
         mapRef.current?.animateCamera({
           ...camera,
@@ -101,156 +74,52 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
     setSelectedAirport(null);
   }, []);
 
-  if (Platform.OS === "web") {
-    return (
-      <View style={styles.webContainer}>
-        <View style={styles.webHeader}>
-          <Text style={styles.webTitle}>Select Airport</Text>
-          <View style={styles.searchContainer}>
-            <Search size={18} color="#64748B" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search airports..."
-              placeholderTextColor="#64748B"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-        </View>
-
-        {originAirport && destinationAirport && (
-          <View style={styles.routeIndicator}>
-            <View style={styles.routeAirport}>
-              <Text style={styles.routeIata}>{originAirport.iata}</Text>
-              <Text style={styles.routeCity}>{originAirport.city}</Text>
-            </View>
-            <View style={styles.routeArrow}>
-              <Plane size={20} color="#00D4FF" />
-            </View>
-            <View style={styles.routeAirport}>
-              <Text style={styles.routeIata}>{destinationAirport.iata}</Text>
-              <Text style={styles.routeCity}>{destinationAirport.city}</Text>
-            </View>
-          </View>
-        )}
-
-        <ScrollView style={styles.airportList} showsVerticalScrollIndicator={false}>
-          {filteredAirports.map((airport) => {
-            const isOrigin = originAirport?.iata === airport.iata;
-            const isDestination = destinationAirport?.iata === airport.iata;
-            const isSelected = selectedAirport?.iata === airport.iata;
-            const dotColor = !airport.operational
-              ? "#FF4444"
-              : userCountryCode && airport.countryCode === userCountryCode
-              ? "#4ADE80"
-              : "#00D4FF";
-
-            return (
-              <TouchableOpacity
-                key={airport.iata}
-                style={[
-                  styles.airportItem,
-                  isSelected && styles.airportItemSelected,
-                  isOrigin && styles.airportItemOrigin,
-                  isDestination && styles.airportItemDestination,
-                  !airport.operational && styles.airportItemClosed,
-                ]}
-                onPress={() => handleAirportPress(airport)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.airportItemLeft}>
-                  <View style={[styles.airportDot, { backgroundColor: dotColor }]} />
-                  <View>
-                    <View style={styles.airportItemHeader}>
-                      <Text style={styles.airportIata}>{airport.iata}</Text>
-                      {isOrigin && <Text style={styles.originBadge}>ORIGIN</Text>}
-                      {isDestination && <Text style={styles.destBadge}>DEST</Text>}
-                    </View>
-                    <Text style={styles.airportCity}>{airport.city}</Text>
-                    <Text style={styles.airportName}>{airport.name}</Text>
-                  </View>
-                </View>
-                <View style={styles.airportItemRight}>
-                  <Text style={styles.airportCountry}>{airport.country}</Text>
-                  {!airport.operational && (
-                    <View style={styles.closedBadgeSmall}>
-                      <Text style={styles.closedTextSmall}>CLOSED</Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.webLegend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "#00D4FF" }]} />
-            <Text style={styles.legendText}>Airports</Text>
-          </View>
-          {userCountryCode && (
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: "#4ADE80" }]} />
-              <Text style={styles.legendText}>Your country</Text>
-            </View>
-          )}
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "#FF4444" }]} />
-            <Text style={styles.legendText}>Closed</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {RNMapView && (
-        <RNMapView
-          ref={mapRef}
-          style={styles.map}
-          provider={PROVIDER_DEFAULT}
-          initialRegion={INITIAL_REGION}
-          mapType="standard"
-          showsUserLocation={true}
-          showsMyLocationButton={false}
-          rotateEnabled={false}
-          pitchEnabled={false}
-        >
-          {MAJOR_AIRPORTS.map((airport) => {
-            const markerColor = getMarkerColor(airport);
+      <RNMapView
+        ref={mapRef}
+        style={styles.map}
+        provider={PROVIDER_DEFAULT}
+        initialRegion={INITIAL_REGION}
+        mapType="standard"
+        showsUserLocation={true}
+        showsMyLocationButton={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+      >
+        {MAJOR_AIRPORTS.map((airport) => {
+          const markerColor = getMarkerColor(airport);
 
-            return (
-              <Marker
-                key={airport.iata}
-                identifier={airport.iata}
-                coordinate={{
-                  latitude: airport.latitude,
-                  longitude: airport.longitude,
-                }}
-                title={`${airport.iata} - ${airport.city}`}
-                description={airport.operational ? airport.name : `CLOSED: ${airport.closureReason}`}
-                onPress={() => handleAirportPress(airport)}
-                pinColor={markerColor}
-                tracksViewChanges={false}
-              />
-            );
-          })}
-
-          {originAirport && destinationAirport && Polyline && (
-            <Polyline
-              coordinates={[
-                { latitude: originAirport.latitude, longitude: originAirport.longitude },
-                { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
-              ]}
-              strokeColor="#00D4FF"
-              strokeWidth={3}
-              lineDashPattern={[10, 5]}
-              geodesic={true}
+          return (
+            <Marker
+              key={airport.iata}
+              identifier={airport.iata}
+              coordinate={{
+                latitude: airport.latitude,
+                longitude: airport.longitude,
+              }}
+              title={`${airport.iata} - ${airport.city}`}
+              description={airport.operational ? airport.name : `CLOSED: ${airport.closureReason}`}
+              onPress={() => handleAirportPress(airport)}
+              pinColor={markerColor}
+              tracksViewChanges={false}
             />
-          )}
-        </RNMapView>
-      )}
+          );
+        })}
+
+        {originAirport && destinationAirport && (
+          <Polyline
+            coordinates={[
+              { latitude: originAirport.latitude, longitude: originAirport.longitude },
+              { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
+            ]}
+            strokeColor="#00D4FF"
+            strokeWidth={3}
+            lineDashPattern={[10, 5]}
+            geodesic={true}
+          />
+        )}
+      </RNMapView>
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
@@ -490,6 +359,9 @@ const styles = StyleSheet.create({
   },
   routeArrow: {
     paddingHorizontal: 16,
+  },
+  routeArrowText: {
+    fontSize: 18,
   },
   airportList: {
     flex: 1,

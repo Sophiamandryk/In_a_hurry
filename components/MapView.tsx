@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -6,7 +6,7 @@ import {
   Text,
 } from "react-native";
 import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
-import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
+import { AlertTriangle, Navigation, ZoomIn, ZoomOut, Plane } from "lucide-react-native";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
 
 interface MapViewProps {
@@ -23,9 +23,52 @@ const INITIAL_REGION = {
   longitudeDelta: 100,
 };
 
+function calculateBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const toDeg = (rad: number) => (rad * 180) / Math.PI;
+  
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - 
+            Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  const bearing = toDeg(Math.atan2(y, x));
+  return (bearing + 360) % 360;
+}
+
+function getArcCoordinates(origin: Airport, destination: Airport, numPoints: number = 50) {
+  const coords = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const fraction = i / numPoints;
+    const lat = origin.latitude + (destination.latitude - origin.latitude) * fraction;
+    const lon = origin.longitude + (destination.longitude - origin.longitude) * fraction;
+    coords.push({ latitude: lat, longitude: lon });
+  }
+  return coords;
+}
+
 export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
   const mapRef = useRef<RNMapView>(null);
+
+  const routeData = useMemo(() => {
+    if (!originAirport || !destinationAirport) return null;
+    
+    const arcCoords = getArcCoordinates(originAirport, destinationAirport);
+    const bearing = calculateBearing(
+      originAirport.latitude,
+      originAirport.longitude,
+      destinationAirport.latitude,
+      destinationAirport.longitude
+    );
+    
+    const arrowPoint = arcCoords[Math.floor(arcCoords.length * 0.7)];
+    
+    return {
+      arcCoords,
+      bearing,
+      arrowPoint,
+    };
+  }, [originAirport, destinationAirport]);
 
   const handleAirportPress = useCallback((airport: Airport) => {
     console.log("[MapView] Airport selected:", airport.iata);
@@ -106,17 +149,52 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
           );
         })}
 
-        {originAirport && destinationAirport && (
-          <Polyline
-            coordinates={[
-              { latitude: originAirport.latitude, longitude: originAirport.longitude },
-              { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
-            ]}
-            strokeColor="#00D4FF"
-            strokeWidth={3}
-            lineDashPattern={[10, 5]}
-            geodesic={true}
-          />
+        {routeData && originAirport && destinationAirport && (
+          <>
+            <Polyline
+              coordinates={routeData.arcCoords}
+              strokeColor="#00D4FF"
+              strokeWidth={3}
+              lineDashPattern={[10, 5]}
+              geodesic={true}
+            />
+            
+            <Marker
+              coordinate={{
+                latitude: originAirport.latitude,
+                longitude: originAirport.longitude,
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+            >
+              <View style={styles.originMarker}>
+                <View style={styles.originDot} />
+              </View>
+            </Marker>
+
+            <Marker
+              coordinate={routeData.arrowPoint}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+            >
+              <View style={[styles.arrowContainer, { transform: [{ rotate: `${routeData.bearing - 90}deg` }] }]}>
+                <Plane size={20} color="#00D4FF" style={{ transform: [{ rotate: '90deg' }] }} />
+              </View>
+            </Marker>
+
+            <Marker
+              coordinate={{
+                latitude: destinationAirport.latitude,
+                longitude: destinationAirport.longitude,
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+            >
+              <View style={styles.destinationMarker}>
+                <View style={styles.destinationInner} />
+              </View>
+            </Marker>
+          </>
         )}
       </RNMapView>
 
@@ -295,5 +373,47 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontStyle: "italic" as const,
     lineHeight: 18,
+  },
+  originMarker: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 212, 255, 0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#00D4FF",
+  },
+  originDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#00D4FF",
+  },
+  arrowContainer: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.9)",
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: "#00D4FF",
+  },
+  destinationMarker: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(74, 222, 128, 0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#4ADE80",
+  },
+  destinationInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#4ADE80",
   },
 });

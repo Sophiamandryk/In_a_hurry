@@ -7,6 +7,7 @@ import {
   Platform,
   Image,
   PanResponder,
+  Animated,
 } from "react-native";
 import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
@@ -26,7 +27,7 @@ const INITIAL_REGION = {
   longitudeDelta: 100,
 };
 
-const STATIC_MAP_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Equirectangular-projection.jpg/2560px-Equirectangular-projection.jpg";
+const STATIC_MAP_URL = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=2560&q=80";
 
 const MAP_WIDTH = 2560;
 const MAP_HEIGHT = 1280;
@@ -42,8 +43,26 @@ function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinati
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [pulseAnim] = useState(new Animated.Value(0));
   
   const lastPanRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: false,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+  }, [pulseAnim]);
 
   const handleAirportPress = useCallback((airport: Airport) => {
     console.log("[WebMapView] Airport selected:", airport.iata);
@@ -138,29 +157,55 @@ function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinati
     const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 
     return (
-      <View
-        style={{
-          position: 'absolute',
-          left: start.x,
-          top: start.y,
-          width: distance,
-          height: 3,
-          backgroundColor: '#00D4FF',
-          transform: [{ rotate: `${angle}deg` }],
-          transformOrigin: 'left center',
-          opacity: 0.8,
-          borderRadius: 2,
-          shadowColor: '#00D4FF',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.8,
-          shadowRadius: 6,
-        }}
-      />
+      <View>
+        <View
+          style={{
+            position: 'absolute',
+            left: start.x,
+            top: start.y - 3,
+            width: distance,
+            height: 8,
+            backgroundColor: 'rgba(0, 212, 255, 0.15)',
+            transform: [{ rotate: `${angle}deg` }],
+            transformOrigin: 'left center',
+            borderRadius: 4,
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            left: start.x,
+            top: start.y - 1,
+            width: distance,
+            height: 2,
+            backgroundColor: '#00D4FF',
+            transform: [{ rotate: `${angle}deg` }],
+            transformOrigin: 'left center',
+            borderRadius: 1,
+            shadowColor: '#00D4FF',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 1,
+            shadowRadius: 8,
+          }}
+        />
+      </View>
     );
   }, [originAirport, destinationAirport, scale, offset]);
 
+  const pulseScale = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.4],
+  });
+
+  const pulseOpacity = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.6, 0],
+  });
+
   return (
     <View style={styles.container} onLayout={handleLayout}>
+      <View style={styles.mapBackground} />
+      
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
         <Image
           source={{ uri: STATIC_MAP_URL }}
@@ -170,11 +215,13 @@ function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinati
             top: offset.y,
             width: MAP_WIDTH * scale,
             height: MAP_HEIGHT * scale,
+            opacity: 0.7,
           }}
           resizeMode="cover"
         />
         
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10, 22, 40, 0.6)' }]} pointerEvents="none" />
+        <View style={styles.mapOverlay} pointerEvents="none" />
+        <View style={styles.gridOverlay} pointerEvents="none" />
 
         {renderFlightPath()}
 
@@ -185,6 +232,7 @@ function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinati
           const isSelected = selectedAirport?.iata === airport.iata;
           const isOrigin = originAirport?.iata === airport.iata;
           const isDestination = destinationAirport?.iata === airport.iata;
+          const isHighlighted = isSelected || isOrigin || isDestination;
 
           if (pos.x < -20 || pos.x > containerSize.width + 20 || 
               pos.y < -20 || pos.y > containerSize.height + 20) {
@@ -192,81 +240,113 @@ function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinati
           }
 
           return (
-            <TouchableOpacity
-              key={airport.iata}
-              style={{
-                position: 'absolute',
-                left: pos.x - markerSize / 2,
-                top: pos.y - markerSize / 2,
-                width: markerSize,
-                height: markerSize,
-                borderRadius: markerSize / 2,
-                backgroundColor: markerColor,
-                borderWidth: (isSelected || isOrigin || isDestination) ? 3 : 2,
-                borderColor: isOrigin ? '#4ADE80' : isDestination ? '#FFB800' : '#FFFFFF',
-                shadowColor: markerColor,
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.8,
-                shadowRadius: (isSelected || isOrigin || isDestination) ? 8 : 4,
-                elevation: 5,
-                zIndex: (isSelected || isOrigin || isDestination) ? 100 : 10,
-              }}
-              onPress={() => handleAirportPress(airport)}
-              activeOpacity={0.7}
-            />
+            <View key={airport.iata} style={{ position: 'absolute', left: pos.x, top: pos.y, zIndex: isHighlighted ? 100 : 10 }}>
+              {isHighlighted && (
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    left: -markerSize,
+                    top: -markerSize,
+                    width: markerSize * 2,
+                    height: markerSize * 2,
+                    borderRadius: markerSize,
+                    backgroundColor: markerColor,
+                    opacity: pulseOpacity,
+                    transform: [{ scale: pulseScale }],
+                  }}
+                />
+              )}
+              <TouchableOpacity
+                style={{
+                  position: 'absolute',
+                  left: -markerSize / 2,
+                  top: -markerSize / 2,
+                  width: markerSize,
+                  height: markerSize,
+                  borderRadius: markerSize / 2,
+                  backgroundColor: markerColor,
+                  borderWidth: isHighlighted ? 2 : 1.5,
+                  borderColor: isOrigin ? '#4ADE80' : isDestination ? '#F59E0B' : 'rgba(255,255,255,0.8)',
+                  shadowColor: markerColor,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 1,
+                  shadowRadius: isHighlighted ? 12 : 6,
+                  elevation: 5,
+                }}
+                onPress={() => handleAirportPress(airport)}
+                activeOpacity={0.7}
+              />
+              {isHighlighted && (
+                <View style={styles.markerLabel}>
+                  <Text style={styles.markerLabelText}>{airport.iata}</Text>
+                </View>
+              )}
+            </View>
           );
         })}
       </View>
 
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#00D4FF" }]} />
-          <Text style={styles.legendText}>Airports</Text>
-        </View>
-        {userCountryCode && (
+      <View style={styles.legendContainer}>
+        <View style={styles.legend}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "#4ADE80" }]} />
-            <Text style={styles.legendText}>Your country</Text>
+            <View style={[styles.legendDot, styles.legendDotGlow, { backgroundColor: "#00D4FF" }]} />
+            <Text style={styles.legendText}>Airports</Text>
           </View>
-        )}
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#FF4444" }]} />
-          <Text style={styles.legendText}>Closed</Text>
+          {userCountryCode && (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotGlow, { backgroundColor: "#4ADE80" }]} />
+              <Text style={styles.legendText}>Your country</Text>
+            </View>
+          )}
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
+            <Text style={styles.legendText}>Closed</Text>
+          </View>
         </View>
       </View>
 
       <View style={styles.mapControls}>
         <TouchableOpacity style={styles.controlButton} onPress={zoomIn} activeOpacity={0.7}>
-          <ZoomIn size={20} color="#00D4FF" />
+          <ZoomIn size={18} color="#00D4FF" />
         </TouchableOpacity>
+        <View style={styles.controlDivider} />
         <TouchableOpacity style={styles.controlButton} onPress={zoomOut} activeOpacity={0.7}>
-          <ZoomOut size={20} color="#00D4FF" />
+          <ZoomOut size={18} color="#00D4FF" />
         </TouchableOpacity>
+        <View style={styles.controlDivider} />
         <TouchableOpacity style={styles.controlButton} onPress={resetView} activeOpacity={0.7}>
-          <Navigation size={18} color="#00D4FF" />
+          <Navigation size={16} color="#00D4FF" />
         </TouchableOpacity>
       </View>
 
       {selectedAirport && (
         <View style={styles.infoCard}>
-          <View style={styles.infoHeader}>
-            <View style={styles.infoLeft}>
-              <View style={[styles.statusDot, { backgroundColor: selectedAirport.operational ? "#4ADE80" : "#FF4444" }]} />
-              <Text style={styles.infoIata}>{selectedAirport.iata}</Text>
+          <View style={styles.infoCardGlow} />
+          <View style={styles.infoCardInner}>
+            <View style={styles.infoHeader}>
+              <View style={styles.infoLeft}>
+                <View style={[styles.statusIndicator, { backgroundColor: selectedAirport.operational ? "rgba(74, 222, 128, 0.2)" : "rgba(239, 68, 68, 0.2)" }]}>
+                  <View style={[styles.statusDot, { backgroundColor: selectedAirport.operational ? "#4ADE80" : "#EF4444" }]} />
+                </View>
+                <Text style={styles.infoIata}>{selectedAirport.iata}</Text>
+              </View>
+              {!selectedAirport.operational && (
+                <View style={styles.closedBadge}>
+                  <AlertTriangle size={11} color="#EF4444" />
+                  <Text style={styles.closedText}>CLOSED</Text>
+                </View>
+              )}
             </View>
-            {!selectedAirport.operational && (
-              <View style={styles.closedBadge}>
-                <AlertTriangle size={12} color="#FF4444" />
-                <Text style={styles.closedText}>CLOSED</Text>
+            <Text style={styles.infoCity}>{selectedAirport.city}</Text>
+            <Text style={styles.infoName}>{selectedAirport.name}</Text>
+            <View style={styles.infoDivider} />
+            <Text style={styles.infoCountry}>{selectedAirport.country}</Text>
+            {selectedAirport.closureReason && (
+              <View style={styles.closureReasonContainer}>
+                <Text style={styles.closureReason}>{selectedAirport.closureReason}</Text>
               </View>
             )}
           </View>
-          <Text style={styles.infoCity}>{selectedAirport.city}</Text>
-          <Text style={styles.infoName}>{selectedAirport.name}</Text>
-          <Text style={styles.infoCountry}>{selectedAirport.country}</Text>
-          {selectedAirport.closureReason && (
-            <Text style={styles.closureReason}>{selectedAirport.closureReason}</Text>
-          )}
         </View>
       )}
     </View>
@@ -436,22 +516,37 @@ export default function MapView(props: MapViewProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#030712',
+  },
+  mapBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#030712',
+  },
+  mapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(3, 7, 18, 0.4)',
+  },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.03,
   },
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-  legend: {
+  legendContainer: {
     position: "absolute",
     bottom: 16,
     left: 16,
+  },
+  legend: {
     flexDirection: "row",
-    gap: 16,
-    backgroundColor: "rgba(15, 23, 42, 0.9)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    gap: 14,
+    backgroundColor: "rgba(15, 23, 42, 0.85)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.2)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
   },
   legendItem: {
     flexDirection: "row",
@@ -459,99 +554,156 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  legendDotGlow: {
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
   },
   legendText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: "rgba(148, 163, 184, 0.9)",
+    fontSize: 11,
+    fontWeight: "500" as const,
   },
   mapControls: {
     position: "absolute",
     right: 16,
-    top: 120,
-    gap: 8,
+    top: 100,
+    backgroundColor: "rgba(15, 23, 42, 0.85)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    overflow: 'hidden',
   },
   controlButton: {
     width: 40,
     height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(15, 23, 42, 0.9)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.3)",
+  },
+  controlDivider: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    marginHorizontal: 8,
+  },
+  markerLabel: {
+    position: 'absolute',
+    top: 14,
+    left: -20,
+    width: 40,
+    alignItems: 'center',
+  },
+  markerLabelText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: "700" as const,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    letterSpacing: 0.5,
   },
   infoCard: {
     position: "absolute",
-    bottom: 70,
+    bottom: 60,
     left: 16,
     right: 16,
+  },
+  infoCardGlow: {
+    position: 'absolute',
+    top: -1,
+    left: -1,
+    right: -1,
+    bottom: -1,
+    borderRadius: 17,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 255, 0.15)',
+  },
+  infoCardInner: {
     backgroundColor: "rgba(15, 23, 42, 0.95)",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.15)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
   },
   infoHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
   infoLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
+  },
+  statusIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   infoIata: {
-    color: "#00D4FF",
-    fontSize: 24,
-    fontWeight: "800" as const,
-    letterSpacing: 1,
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "700" as const,
+    letterSpacing: 2,
   },
   closedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255, 68, 68, 0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 5,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255, 68, 68, 0.3)",
   },
   closedText: {
-    color: "#FF4444",
-    fontSize: 11,
-    fontWeight: "700" as const,
+    color: "#EF4444",
+    fontSize: 10,
+    fontWeight: "600" as const,
+    letterSpacing: 0.5,
   },
   infoCity: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600" as const,
   },
   infoName: {
-    color: "#94A3B8",
+    color: "rgba(148, 163, 184, 0.8)",
     fontSize: 13,
-    marginTop: 2,
+    marginTop: 3,
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    marginVertical: 10,
   },
   infoCountry: {
-    color: "#64748B",
+    color: "rgba(100, 116, 139, 0.9)",
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: "500" as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1,
+  },
+  closureReasonContainer: {
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
   },
   closureReason: {
-    color: "#FF4444",
+    color: "rgba(239, 68, 68, 0.9)",
     fontSize: 12,
-    marginTop: 10,
-    fontStyle: "italic" as const,
     lineHeight: 18,
   },
   webContainer: {

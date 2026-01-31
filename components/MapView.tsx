@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   Text,
+  Platform,
 } from "react-native";
 import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
@@ -23,7 +24,213 @@ const INITIAL_REGION = {
   longitudeDelta: 100,
 };
 
-export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
+
+function WebMapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
+  const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<google.maps.Map | null>(null);
+  const markersRef = useRef<google.maps.Marker[]>([]);
+  const polylineRef = useRef<google.maps.Polyline | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+
+  const handleAirportPress = useCallback((airport: Airport) => {
+    console.log("[WebMapView] Airport selected:", airport.iata);
+    setSelectedAirport(airport);
+    onAirportSelect?.(airport);
+    
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.panTo({ lat: airport.latitude, lng: airport.longitude });
+      mapInstanceRef.current.setZoom(6);
+    }
+  }, [onAirportSelect]);
+
+  const getMarkerColor = useCallback((airport: Airport): string => {
+    if (!airport.operational) return "#FF4444";
+    if (userCountryCode && airport.countryCode === userCountryCode) return "#4ADE80";
+    return "#00D4FF";
+  }, [userCountryCode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const loadGoogleMaps = () => {
+      if ((window as any).google?.maps) {
+        setMapLoaded(true);
+        return;
+      }
+
+      const existingScript = document.getElementById('google-maps-script');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => setMapLoaded(true));
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.id = 'google-maps-script';
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => setMapLoaded(true);
+      script.onerror = () => console.error('[WebMapView] Failed to load Google Maps');
+      document.head.appendChild(script);
+    };
+
+    loadGoogleMaps();
+  }, []);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapContainerRef.current || mapInstanceRef.current) return;
+
+    const google = (window as any).google;
+    if (!google?.maps) return;
+
+    mapInstanceRef.current = new google.maps.Map(mapContainerRef.current, {
+      center: { lat: 30, lng: 0 },
+      zoom: 2,
+      styles: [
+        { elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#1e293b' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
+        { featureType: 'road', stylers: [{ visibility: 'off' }] },
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+      ],
+      disableDefaultUI: true,
+      zoomControl: false,
+    });
+
+    MAJOR_AIRPORTS.forEach((airport) => {
+      const marker = new google.maps.Marker({
+        position: { lat: airport.latitude, lng: airport.longitude },
+        map: mapInstanceRef.current,
+        title: `${airport.iata} - ${airport.city}`,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: getMarkerColor(airport),
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        },
+      });
+
+      marker.addListener('click', () => handleAirportPress(airport));
+      markersRef.current.push(marker);
+    });
+  }, [mapLoaded, getMarkerColor, handleAirportPress]);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !mapLoaded) return;
+
+    const google = (window as any).google;
+    if (!google?.maps) return;
+
+    if (polylineRef.current) {
+      polylineRef.current.setMap(null);
+    }
+    polylineRef.current = null;
+
+    if (originAirport && destinationAirport) {
+      polylineRef.current = new google.maps.Polyline({
+        path: [
+          { lat: originAirport.latitude, lng: originAirport.longitude },
+          { lat: destinationAirport.latitude, lng: destinationAirport.longitude },
+        ],
+        geodesic: true,
+        strokeColor: '#00D4FF',
+        strokeOpacity: 1,
+        strokeWeight: 3,
+      });
+      polylineRef.current.setMap(mapInstanceRef.current);
+
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend({ lat: originAirport.latitude, lng: originAirport.longitude });
+      bounds.extend({ lat: destinationAirport.latitude, lng: destinationAirport.longitude });
+      mapInstanceRef.current.fitBounds(bounds, 50);
+    }
+  }, [originAirport, destinationAirport, mapLoaded]);
+
+  const zoomIn = useCallback(() => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setZoom((mapInstanceRef.current.getZoom() || 2) + 1);
+    }
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setZoom(Math.max((mapInstanceRef.current.getZoom() || 2) - 1, 1));
+    }
+  }, []);
+
+  const resetView = useCallback(() => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setCenter({ lat: 30, lng: 0 });
+      mapInstanceRef.current.setZoom(2);
+    }
+    setSelectedAirport(null);
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <div ref={mapContainerRef as any} style={{ width: '100%', height: '100%', position: 'absolute' }} />
+      
+      <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: "#00D4FF" }]} />
+          <Text style={styles.legendText}>Airports</Text>
+        </View>
+        {userCountryCode && (
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#4ADE80" }]} />
+            <Text style={styles.legendText}>Your country</Text>
+          </View>
+        )}
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: "#FF4444" }]} />
+          <Text style={styles.legendText}>Closed</Text>
+        </View>
+      </View>
+
+      <View style={styles.mapControls}>
+        <TouchableOpacity style={styles.controlButton} onPress={zoomIn} activeOpacity={0.7}>
+          <ZoomIn size={20} color="#00D4FF" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.controlButton} onPress={zoomOut} activeOpacity={0.7}>
+          <ZoomOut size={20} color="#00D4FF" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.controlButton} onPress={resetView} activeOpacity={0.7}>
+          <Navigation size={18} color="#00D4FF" />
+        </TouchableOpacity>
+      </View>
+
+      {selectedAirport && (
+        <View style={styles.infoCard}>
+          <View style={styles.infoHeader}>
+            <View style={styles.infoLeft}>
+              <View style={[styles.statusDot, { backgroundColor: selectedAirport.operational ? "#4ADE80" : "#FF4444" }]} />
+              <Text style={styles.infoIata}>{selectedAirport.iata}</Text>
+            </View>
+            {!selectedAirport.operational && (
+              <View style={styles.closedBadge}>
+                <AlertTriangle size={12} color="#FF4444" />
+                <Text style={styles.closedText}>CLOSED</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.infoCity}>{selectedAirport.city}</Text>
+          <Text style={styles.infoName}>{selectedAirport.name}</Text>
+          <Text style={styles.infoCountry}>{selectedAirport.country}</Text>
+          {selectedAirport.closureReason && (
+            <Text style={styles.closureReason}>{selectedAirport.closureReason}</Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function NativeMapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
   const mapRef = useRef<RNMapView>(null);
 
@@ -174,6 +381,13 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
       )}
     </View>
   );
+}
+
+export default function MapView(props: MapViewProps) {
+  if (Platform.OS === 'web') {
+    return <WebMapView {...props} />;
+  }
+  return <NativeMapView {...props} />;
 }
 
 const styles = StyleSheet.create({

@@ -111,6 +111,21 @@ export default function FlightSearchScreen() {
     return SCREEN_HEIGHT * 0.75;
   }, []);
 
+  const handleAirportSelect = useCallback((airport: Airport) => {
+    console.log("[FlightSearch] Airport selected:", airport.iata);
+    
+    if (isSelectingDestination && selectedAirport) {
+      console.log("[FlightSearch] Destination selected:", airport.iata);
+      setDestinationAirport(airport);
+      setIsSelectingDestination(false);
+    } else {
+      setSelectedAirport(airport);
+      setDestinationAirport(null);
+      setIsSelectingDestination(false);
+      startButtonPulse();
+    }
+  }, [isSelectingDestination, selectedAirport]);
+
   const startButtonPulse = useCallback(() => {
     buttonGlowAnim.setValue(0);
     Animated.loop(
@@ -149,30 +164,6 @@ export default function FlightSearchScreen() {
     buttonPulseAnim.setValue(1);
     buttonGlowAnim.setValue(0);
   }, [buttonPulseAnim, buttonGlowAnim]);
-
-  const handleAirportSelect = useCallback((airport: Airport) => {
-    console.log("[FlightSearch] Airport selected:", airport.iata, "isSelectingDestination:", isSelectingDestination);
-    
-    if (!airport) {
-      console.log("[FlightSearch] No airport provided");
-      return;
-    }
-    
-    if (isSelectingDestination && selectedAirport) {
-      console.log("[FlightSearch] Destination selected:", airport.iata);
-      if (airport.iata === selectedAirport.iata) {
-        console.log("[FlightSearch] Same airport selected as origin, ignoring");
-        return;
-      }
-      setDestinationAirport(airport);
-      setIsSelectingDestination(false);
-    } else {
-      setSelectedAirport(airport);
-      setDestinationAirport(null);
-      setIsSelectingDestination(false);
-      startButtonPulse();
-    }
-  }, [isSelectingDestination, selectedAirport, startButtonPulse]);
 
   const handleStartDestinationSelection = useCallback(() => {
     setIsSelectingDestination(true);

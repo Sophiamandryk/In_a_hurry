@@ -8,10 +8,21 @@ import {
   ScrollView,
   TextInput,
 } from "react-native";
-import { Search, Plane } from "lucide-react-native";
-import RNMapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
-import { AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
+import { Search, Plane, AlertTriangle, Navigation, ZoomIn, ZoomOut } from "lucide-react-native";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
+
+let RNMapView: any = null;
+let Marker: any = null;
+let Polyline: any = null;
+let PROVIDER_DEFAULT: any = null;
+
+if (Platform.OS !== 'web') {
+  const maps = require('react-native-maps');
+  RNMapView = maps.default;
+  Marker = maps.Marker;
+  Polyline = maps.Polyline;
+  PROVIDER_DEFAULT = maps.PROVIDER_DEFAULT;
+}
 
 interface MapViewProps {
   onAirportSelect?: (airport: Airport) => void;
@@ -30,7 +41,7 @@ const INITIAL_REGION = {
 export default function MapView({ onAirportSelect, userCountryCode, originAirport, destinationAirport }: MapViewProps) {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const mapRef = useRef<RNMapView>(null);
+  const mapRef = useRef<any>(null);
 
   const filteredAirports = useMemo(() => {
     if (!searchQuery.trim()) return MAJOR_AIRPORTS;
@@ -43,7 +54,6 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
         airport.name.toLowerCase().includes(query)
     );
   }, [searchQuery]);
-
 
   const handleAirportPress = useCallback((airport: Airport) => {
     console.log("[MapView] Airport selected:", airport.iata);
@@ -65,7 +75,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   }, [userCountryCode]);
 
   const zoomIn = useCallback(() => {
-    mapRef.current?.getCamera().then((camera) => {
+    mapRef.current?.getCamera().then((camera: any) => {
       if (camera) {
         mapRef.current?.animateCamera({
           ...camera,
@@ -76,7 +86,7 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   }, []);
 
   const zoomOut = useCallback(() => {
-    mapRef.current?.getCamera().then((camera) => {
+    mapRef.current?.getCamera().then((camera: any) => {
       if (camera) {
         mapRef.current?.animateCamera({
           ...camera,
@@ -195,50 +205,52 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
 
   return (
     <View style={styles.container}>
-      <RNMapView
-        ref={mapRef}
-        style={styles.map}
-        provider={PROVIDER_DEFAULT}
-        initialRegion={INITIAL_REGION}
-        mapType="standard"
-        showsUserLocation={true}
-        showsMyLocationButton={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
-      >
-        {MAJOR_AIRPORTS.map((airport) => {
-          const markerColor = getMarkerColor(airport);
+      {RNMapView && (
+        <RNMapView
+          ref={mapRef}
+          style={styles.map}
+          provider={PROVIDER_DEFAULT}
+          initialRegion={INITIAL_REGION}
+          mapType="standard"
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+        >
+          {MAJOR_AIRPORTS.map((airport) => {
+            const markerColor = getMarkerColor(airport);
 
-          return (
-            <Marker
-              key={airport.iata}
-              identifier={airport.iata}
-              coordinate={{
-                latitude: airport.latitude,
-                longitude: airport.longitude,
-              }}
-              title={`${airport.iata} - ${airport.city}`}
-              description={airport.operational ? airport.name : `CLOSED: ${airport.closureReason}`}
-              onPress={() => handleAirportPress(airport)}
-              pinColor={markerColor}
-              tracksViewChanges={false}
+            return (
+              <Marker
+                key={airport.iata}
+                identifier={airport.iata}
+                coordinate={{
+                  latitude: airport.latitude,
+                  longitude: airport.longitude,
+                }}
+                title={`${airport.iata} - ${airport.city}`}
+                description={airport.operational ? airport.name : `CLOSED: ${airport.closureReason}`}
+                onPress={() => handleAirportPress(airport)}
+                pinColor={markerColor}
+                tracksViewChanges={false}
+              />
+            );
+          })}
+
+          {originAirport && destinationAirport && Polyline && (
+            <Polyline
+              coordinates={[
+                { latitude: originAirport.latitude, longitude: originAirport.longitude },
+                { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
+              ]}
+              strokeColor="#00D4FF"
+              strokeWidth={3}
+              lineDashPattern={[10, 5]}
+              geodesic={true}
             />
-          );
-        })}
-
-        {originAirport && destinationAirport && (
-          <Polyline
-            coordinates={[
-              { latitude: originAirport.latitude, longitude: originAirport.longitude },
-              { latitude: destinationAirport.latitude, longitude: destinationAirport.longitude },
-            ]}
-            strokeColor="#00D4FF"
-            strokeWidth={3}
-            lineDashPattern={[10, 5]}
-            geodesic={true}
-          />
-        )}
-      </RNMapView>
+          )}
+        </RNMapView>
+      )}
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
@@ -478,9 +490,6 @@ const styles = StyleSheet.create({
   },
   routeArrow: {
     paddingHorizontal: 16,
-  },
-  routeArrowText: {
-    fontSize: 18,
   },
   airportList: {
     flex: 1,

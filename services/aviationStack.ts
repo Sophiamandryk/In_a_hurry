@@ -35,16 +35,18 @@ export interface FlightSearchResult {
   nextAvailableFlight?: Flight;
 }
 
-const AVIATIONSTACK_API_KEY = process.env.EXPO_PUBLIC_AVIATIONSTACK_API_KEY;
 const BASE_URL = "http://api.aviationstack.com/v1";
 
 export async function getFlights(
   depIata: string,
   arrIata: string
 ): Promise<FlightSearchResult> {
+  const apiKey = process.env.EXPO_PUBLIC_AVIATIONSTACK_API_KEY;
+  
   console.log(`[AviationStack] Fetching flights from ${depIata} to ${arrIata}`);
+  console.log(`[AviationStack] API key present: ${!!apiKey}`);
 
-  if (!AVIATIONSTACK_API_KEY) {
+  if (!apiKey) {
     console.error("[AviationStack] API key not configured");
     return {
       flights: [],
@@ -54,8 +56,8 @@ export async function getFlights(
 
   try {
     // First try with scheduled flights
-    let url = `${BASE_URL}/flights?access_key=${AVIATIONSTACK_API_KEY}&dep_iata=${depIata}&arr_iata=${arrIata}&flight_status=scheduled`;
-    console.log("[AviationStack] Request URL:", url.replace(AVIATIONSTACK_API_KEY, "***"));
+    let url = `${BASE_URL}/flights?access_key=${apiKey}&dep_iata=${depIata}&arr_iata=${arrIata}&flight_status=scheduled`;
+    console.log("[AviationStack] Request URL:", url.replace(apiKey, "***"));
 
     let response = await fetch(url);
     let data = await response.json();
@@ -129,8 +131,8 @@ export async function getFlights(
       console.log("[AviationStack] No scheduled flights found, searching for any available flights...");
       
       // Try without flight_status filter to get all flights
-      url = `${BASE_URL}/flights?access_key=${AVIATIONSTACK_API_KEY}&dep_iata=${depIata}&arr_iata=${arrIata}`;
-      console.log("[AviationStack] Retry URL:", url.replace(AVIATIONSTACK_API_KEY, "***"));
+      url = `${BASE_URL}/flights?access_key=${apiKey}&dep_iata=${depIata}&arr_iata=${arrIata}`;
+      console.log("[AviationStack] Retry URL:", url.replace(apiKey, "***"));
       
       response = await fetch(url);
       data = await response.json();

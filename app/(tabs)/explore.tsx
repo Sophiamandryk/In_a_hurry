@@ -25,9 +25,9 @@ import {
   ChevronRight,
   Clock
 } from "lucide-react-native";
-import { useQuery } from "@tanstack/react-query";
 import { MAJOR_AIRPORTS, Airport } from "@/constants/airports";
-import { getAirportAmenities, PlaceResult, getPhotoUrl, getPriceLevel } from "@/services/googlePlaces";
+import { trpc } from "@/lib/trpc";
+import { PlaceResult, getPriceLevel } from "@/services/googlePlaces";
 
 type AmenityTab = 'food' | 'restrooms' | 'lounges' | 'shops';
 
@@ -38,16 +38,21 @@ export default function ExploreScreen() {
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
   const [activeTab, setActiveTab] = useState<AmenityTab>('food');
 
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data: amenities, isLoading: amenitiesLoading } = useQuery({
-    queryKey: ['airport-amenities', selectedAirport?.iata, selectedAirport?.latitude, selectedAirport?.longitude],
-    queryFn: () => {
-      if (!selectedAirport) return null;
-      return getAirportAmenities(selectedAirport.latitude, selectedAirport.longitude);
+  const { data: amenities, isLoading: amenitiesLoading } = trpc.places.getAirportAmenities.useQuery(
+    {
+      latitude: selectedAirport?.latitude ?? 0,
+      longitude: selectedAirport?.longitude ?? 0,
     },
-    enabled: !!selectedAirport,
-    staleTime: 1000 * 60 * 10,
-  });
+    {
+      enabled: !!selectedAirport,
+      staleTime: 1000 * 60 * 10,
+    }
+  );
+
+  const getPhotoUrl = (photoReference: string, maxWidth: number = 400): string => {
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+    return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photo_reference=${photoReference}&key=${apiKey}`;
+  };
 
   const countries = useMemo(() => {
     const uniqueCountries = [...new Set(MAJOR_AIRPORTS.map((a) => a.country))];

@@ -33,12 +33,16 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
     setSelectedAirport(airport);
     onAirportSelect?.(airport);
 
-    mapRef.current?.animateToRegion({
-      latitude: airport.latitude,
-      longitude: airport.longitude,
-      latitudeDelta: 15,
-      longitudeDelta: 15,
-    }, 500);
+    try {
+      mapRef.current?.animateToRegion({
+        latitude: airport.latitude,
+        longitude: airport.longitude,
+        latitudeDelta: 15,
+        longitudeDelta: 15,
+      }, 500);
+    } catch (error) {
+      console.log("[MapView] animateToRegion error:", error);
+    }
   }, [onAirportSelect]);
 
   const getMarkerColor = useCallback((airport: Airport): string => {
@@ -48,29 +52,41 @@ export default function MapView({ onAirportSelect, userCountryCode, originAirpor
   }, [userCountryCode]);
 
   const zoomIn = useCallback(() => {
-    mapRef.current?.getCamera().then((camera) => {
-      if (camera) {
-        mapRef.current?.animateCamera({
-          ...camera,
-          zoom: (camera.zoom || 1) + 1,
-        }, { duration: 300 });
-      }
-    });
+    try {
+      mapRef.current?.getCamera().then((camera) => {
+        if (camera) {
+          mapRef.current?.animateCamera({
+            ...camera,
+            zoom: (camera.zoom || 1) + 1,
+          }, { duration: 300 });
+        }
+      }).catch((e) => console.log("[MapView] zoomIn error:", e));
+    } catch (error) {
+      console.log("[MapView] zoomIn error:", error);
+    }
   }, []);
 
   const zoomOut = useCallback(() => {
-    mapRef.current?.getCamera().then((camera) => {
-      if (camera) {
-        mapRef.current?.animateCamera({
-          ...camera,
-          zoom: Math.max((camera.zoom || 1) - 1, 1),
-        }, { duration: 300 });
-      }
-    });
+    try {
+      mapRef.current?.getCamera().then((camera) => {
+        if (camera) {
+          mapRef.current?.animateCamera({
+            ...camera,
+            zoom: Math.max((camera.zoom || 1) - 1, 1),
+          }, { duration: 300 });
+        }
+      }).catch((e) => console.log("[MapView] zoomOut error:", e));
+    } catch (error) {
+      console.log("[MapView] zoomOut error:", error);
+    }
   }, []);
 
   const resetView = useCallback(() => {
-    mapRef.current?.animateToRegion(INITIAL_REGION, 500);
+    try {
+      mapRef.current?.animateToRegion(INITIAL_REGION, 500);
+    } catch (error) {
+      console.log("[MapView] resetView error:", error);
+    }
     setSelectedAirport(null);
   }, []);
 

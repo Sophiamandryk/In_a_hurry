@@ -25,30 +25,9 @@ interface ChatInterfaceProps {
   onClearSelection?: () => void;
 }
 
-interface QuickPrompt {
-  label: string;
-  prompt: string;
-}
-
 const closedAirportsList = Object.entries(CLOSED_AIRPORTS_INFO)
   .map(([code, info]) => `${code}: ${info}`)
   .join("\n");
-
-const SYSTEM_PROMPT = `You are a flight search assistant. Help users find flights between airports. Be concise and direct in your responses. Do not use markdown formatting like asterisks, bullet points, or headers.
-
-When a user asks about flights, extract the origin and destination airports and call the get_flight_info tool.
-- If the user mentions a city name, identify the main airport IATA code (e.g., Warsaw = WAW, Amsterdam = AMS, New York = JFK)
-- If the user mentions a country, ask them to specify a city or use the main international airport
-
-IMPORTANT - CLOSED AIRPORTS:
-The following airports are currently closed and cannot be used for flights:
-${closedAirportsList}
-
-All Ukrainian airports have been closed since February 2022 due to the ongoing war. Ukrainian airspace remains closed to civilian traffic. If a user asks about flights to/from Ukraine or any Ukrainian city (Kyiv, Lviv, Odesa, Kharkiv, etc.), inform them that these airports are not operational and suggest nearby alternatives like Warsaw (WAW) or Krakow (KRK) in Poland.
-
-Common IATA codes: WAW (Warsaw), AMS (Amsterdam), JFK (New York), LHR (London), CDG (Paris), FRA (Frankfurt), DXB (Dubai), SIN (Singapore)
-
-Keep responses short and to the point. No bullet points or special formatting.`;
 
 export default function ChatInterface({ 
   onFlightsFound, 
@@ -63,50 +42,22 @@ export default function ChatInterface({
   const inputRef = useRef<TextInput>(null);
   const [hasAutoSent, setHasAutoSent] = useState(false);
 
-  const quickPrompts: QuickPrompt[] = React.useMemo(() => {
-    if (!originAirport) return [];
-    
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    
-    if (destinationAirport) {
-      return [
-        {
-          label: `Next flight ${originAirport.iata} → ${destinationAirport.iata}`,
-          prompt: `Find the next available flight from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time is ${timeStr} on ${dateStr}.`
-        },
-        {
-          label: `Tomorrow's flights`,
-          prompt: `Show me flights from ${originAirport.iata} to ${destinationAirport.iata} for tomorrow, ${tomorrowStr}.`
-        },
-        {
-          label: `Morning flights`,
-          prompt: `Find morning flights (6 AM - 12 PM) from ${originAirport.iata} to ${destinationAirport.iata}.`
-        },
-        {
-          label: `Evening flights`,
-          prompt: `Find evening flights (5 PM - 11 PM) from ${originAirport.iata} to ${destinationAirport.iata}.`
-        },
-      ];
-    }
-    
-    return [
-      {
-        label: `Flights from ${originAirport.iata}`,
-        prompt: `Show me the next available flights departing from ${originAirport.iata} (${originAirport.city}).`
-      },
-      {
-        label: `${originAirport.iata} destinations`,
-        prompt: `What are popular destinations from ${originAirport.iata}?`
-      },
-    ];
-  }, [originAirport, destinationAirport]);
-
   const { messages, error, sendMessage, status } = useRorkAgent({
+    systemPrompt: `You are a flight search assistant. Help users find flights between airports. Be concise and direct in your responses. Do not use markdown formatting like asterisks, bullet points, or headers.
+
+When a user asks about flights, extract the origin and destination airports and call the get_flight_info tool.
+- If the user mentions a city name, identify the main airport IATA code (e.g., Warsaw = WAW, Amsterdam = AMS, New York = JFK)
+- If the user mentions a country, ask them to specify a city or use the main international airport
+
+IMPORTANT - CLOSED AIRPORTS:
+The following airports are currently closed and cannot be used for flights:
+${closedAirportsList}
+
+All Ukrainian airports have been closed since February 2022 due to the ongoing war. Ukrainian airspace remains closed to civilian traffic. If a user asks about flights to/from Ukraine or any Ukrainian city (Kyiv, Lviv, Odesa, Kharkiv, etc.), inform them that these airports are not operational and suggest nearby alternatives like Warsaw (WAW) or Krakow (KRK) in Poland.
+
+Common IATA codes: WAW (Warsaw), AMS (Amsterdam), JFK (New York), LHR (London), CDG (Paris), FRA (Frankfurt), DXB (Dubai), SIN (Singapore)
+
+Keep responses short and to the point. No bullet points or special formatting.`,
     tools: {
       get_flight_info: createRorkTool({
         description: "Get flight information between two airports using IATA codes",
@@ -118,7 +69,7 @@ export default function ChatInterface({
             .string()
             .describe("Destination airport IATA code (e.g., JFK for New York, LHR for London)"),
         }),
-        async execute(toolInput): Promise<string> {
+        async execute(toolInput) {
           console.log("[ChatInterface] Tool called with:", toolInput);
           setIsSearching(true);
 
@@ -132,7 +83,11 @@ export default function ChatInterface({
 
             if (result.error) {
               setIsSearching(false);
-              return `Error searching flights: ${result.error}`;
+              return {
+                success: false,
+                error: result.error,
+                message: `Error searching flights: ${result.error}`,
+              };
             }
 
             setIsSearching(false);
@@ -140,31 +95,59 @@ export default function ChatInterface({
             if (result.flights.length === 0) {
               if (result.nextAvailableFlight) {
                 const nextFlight = result.nextAvailableFlight;
+                // Accumulate flights instead of overwriting
                 setFoundFlights(prev => {
                   const newFlights = [...prev, nextFlight];
                   onFlightsFound?.(newFlights);
                   return newFlights;
                 });
-                return `No flights available right now, but found the next available flight: ${nextFlight.flight.iata} by ${nextFlight.airline.name} departing on ${nextFlight.departure.scheduled}`;
+                return {
+                  success: true,
+                  flights: [{
+                    flight: nextFlight.flight.iata,
+                    airline: nextFlight.airline.name,
+                    departure: nextFlight.departure.scheduled,
+                    arrival: nextFlight.arrival.scheduled,
+                    status: nextFlight.flightStatus,
+                  }],
+                  message: `No flights available right now, but found the next available flight: ${nextFlight.flight.iata} by ${nextFlight.airline.name} departing on ${nextFlight.departure.scheduled}`,
+                };
               }
-              return `No scheduled flights found from ${toolInput.loc_origin} to ${toolInput.loc_destination}. This could be because there are no direct flights on this route, or no flights are scheduled in the near future.`;
+              return {
+                success: true,
+                flights: [],
+                message: `No scheduled flights found from ${toolInput.loc_origin} to ${toolInput.loc_destination}. This could be because there are no direct flights on this route, or no flights are scheduled in the near future.`,
+              };
             }
 
+            // Accumulate flights instead of overwriting
             setFoundFlights(prev => {
               const newFlights = [...prev, ...result.flights];
               onFlightsFound?.(newFlights);
               return newFlights;
             });
 
-            const flightSummary = result.flights.slice(0, 5).map((f) => 
-              `${f.flight.iata} (${f.airline.name}) - Departs: ${f.departure.scheduled}, Arrives: ${f.arrival.scheduled}, Status: ${f.flightStatus}`
-            ).join("\n");
+            const flightSummary = result.flights.slice(0, 5).map((f) => ({
+              flight: f.flight.iata,
+              airline: f.airline.name,
+              departure: f.departure.scheduled,
+              arrival: f.arrival.scheduled,
+              status: f.flightStatus,
+            }));
 
-            return `Found ${result.flights.length} flights from ${toolInput.loc_origin} to ${toolInput.loc_destination}:\n${flightSummary}`;
+            return {
+              success: true,
+              totalFlights: result.flights.length,
+              flights: flightSummary,
+              message: `Found ${result.flights.length} flights from ${toolInput.loc_origin} to ${toolInput.loc_destination}`,
+            };
           } catch (err) {
             console.error("[ChatInterface] Tool execution error:", err);
             setIsSearching(false);
-            return `Error: ${err instanceof Error ? err.message : "Unknown error"}`;
+            return {
+              success: false,
+              error: err instanceof Error ? err.message : "Unknown error",
+            };
           }
         },
       }),
@@ -182,7 +165,7 @@ export default function ChatInterface({
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
       const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-      const prompt = `${SYSTEM_PROMPT}\n\nFind the next available flight from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time is ${timeStr} on ${dateStr}. If no flights are available now, find the closest upcoming flight.`;
+      const prompt = `Find the next available flight from ${originAirport.iata} (${originAirport.city}) to ${destinationAirport.iata} (${destinationAirport.city}). Current time is ${timeStr} on ${dateStr}. If no flights are available now, find the closest upcoming flight.`;
       console.log("[ChatInterface] Auto-sending prompt:", prompt);
       setFoundFlights([]);
       sendMessage(prompt);
@@ -202,13 +185,6 @@ export default function ChatInterface({
     setFoundFlights([]);
     sendMessage(input);
     setInput("");
-    Keyboard.dismiss();
-  };
-
-  const handleQuickPrompt = (prompt: string) => {
-    console.log("[ChatInterface] Quick prompt selected:", prompt);
-    setFoundFlights([]);
-    sendMessage(prompt);
     Keyboard.dismiss();
   };
 
@@ -323,29 +299,10 @@ export default function ChatInterface({
             ) : (
               <Text style={styles.welcomeText}>
                 Ask me about flights! Try:{"\n\n"}
-                {"\"Next flight from Warsaw to Amsterdam?\""}{"\n\n"}
-                {"\"Flights from JFK to London\""}
+                "Next flight from Warsaw to Amsterdam?"{"\n\n"}
+                "Flights from JFK to London"
               </Text>
             )}
-          </View>
-        )}
-
-        {quickPrompts.length > 0 && messages.length === 0 && !hasAutoSent && (
-          <View style={styles.quickPromptsContainer}>
-            <Text style={styles.quickPromptsTitle}>Quick searches</Text>
-            <View style={styles.quickPromptsGrid}>
-              {quickPrompts.map((qp, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.quickPromptButton}
-                  onPress={() => handleQuickPrompt(qp.prompt)}
-                  activeOpacity={0.7}
-                >
-                  <Plane size={14} color="#00D4FF" />
-                  <Text style={styles.quickPromptText}>{qp.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
           </View>
         )}
 
@@ -631,39 +588,5 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
-  },
-  quickPromptsContainer: {
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  quickPromptsTitle: {
-    color: "#64748B",
-    fontSize: 12,
-    textTransform: "uppercase" as const,
-    letterSpacing: 1,
-    marginBottom: 12,
-    textAlign: "center" as const,
-  },
-  quickPromptsGrid: {
-    flexDirection: "row" as const,
-    flexWrap: "wrap" as const,
-    gap: 8,
-    justifyContent: "center" as const,
-  },
-  quickPromptButton: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 6,
-    backgroundColor: "rgba(0, 212, 255, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.25)",
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  quickPromptText: {
-    color: "#00D4FF",
-    fontSize: 13,
-    fontWeight: "500" as const,
   },
 });

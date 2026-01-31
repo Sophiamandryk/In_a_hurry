@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Text,
   Platform,
+  Alert,
   Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -109,6 +110,21 @@ export default function FlightSearchScreen() {
     return SCREEN_HEIGHT * 0.75;
   }, []);
 
+  const handleAirportSelect = useCallback((airport: Airport) => {
+    console.log("[FlightSearch] Airport selected:", airport.iata);
+    
+    if (isSelectingDestination && selectedAirport) {
+      console.log("[FlightSearch] Destination selected:", airport.iata);
+      setDestinationAirport(airport);
+      setIsSelectingDestination(false);
+    } else {
+      setSelectedAirport(airport);
+      setDestinationAirport(null);
+      setIsSelectingDestination(false);
+      startButtonPulse();
+    }
+  }, [isSelectingDestination, selectedAirport]);
+
   const startButtonPulse = useCallback(() => {
     buttonGlowAnim.setValue(0);
     Animated.loop(
@@ -147,24 +163,6 @@ export default function FlightSearchScreen() {
     buttonPulseAnim.setValue(1);
     buttonGlowAnim.setValue(0);
   }, [buttonPulseAnim, buttonGlowAnim]);
-
-  const handleAirportSelect = useCallback((airport: Airport) => {
-    console.log("[FlightSearch] Airport selected:", airport.iata, "isSelectingDestination:", isSelectingDestination, "currentOrigin:", selectedAirport?.iata);
-    
-    if (isSelectingDestination && selectedAirport) {
-      if (airport.iata === selectedAirport.iata) {
-        console.log("[FlightSearch] Cannot select same airport as origin and destination");
-        return;
-      }
-      console.log("[FlightSearch] Destination selected:", airport.iata);
-      setDestinationAirport(airport);
-      setIsSelectingDestination(false);
-    } else if (!isSelectingDestination) {
-      setSelectedAirport(airport);
-      setDestinationAirport(null);
-      startButtonPulse();
-    }
-  }, [isSelectingDestination, selectedAirport, startButtonPulse]);
 
   const handleStartDestinationSelection = useCallback(() => {
     setIsSelectingDestination(true);
@@ -205,7 +203,6 @@ export default function FlightSearchScreen() {
           userCountryCode={userCountryCode}
           originAirport={selectedAirport}
           destinationAirport={destinationAirport}
-          isSelectingDestination={isSelectingDestination}
         />
       </View>
 
